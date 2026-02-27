@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API-Odoo Middleware - Documentacion General</title>
+    <style>
+        :root {
+            --primary: #1a56db;
+            --primary-light: #e8eefb;
+            --primary-dark: #0f3a8e;
+            --accent: #059669;
+            --accent-light: #d1fae5;
+            --danger: #dc2626;
+            --danger-light: #fee2e2;
+            --warning: #d97706;
+            --warning-light: #fef3c7;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --radius: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.7;
+            color: var(--gray-800);
+            background: var(--gray-50);
+        }
+
+        /* HEADER */
+        .header {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+            color: white;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.3rem;
+        }
+
+        .header p {
+            font-size: 0.95rem;
+            opacity: 0.9;
+        }
+
+        .header-meta {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 0.8rem;
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        /* LAYOUT */
+        .layout {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 280px;
+            min-width: 280px;
+            background: white;
+            border-right: 1px solid var(--gray-200);
+            height: calc(100vh - 100px);
+            position: sticky;
+            top: 100px;
+            overflow-y: auto;
+            padding: 1.5rem 0;
+        }
+
+        .sidebar-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--gray-500);
+            padding: 0 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.45rem 1.5rem;
+            color: var(--gray-600);
+            text-decoration: none;
+            font-size: 0.85rem;
+            border-left: 3px solid transparent;
+            transition: all 0.15s;
+        }
+
+        .sidebar a:hover,
+        .sidebar a.active {
+            color: var(--primary);
+            background: var(--primary-light);
+            border-left-color: var(--primary);
+        }
+
+        /* MAIN CONTENT */
+        .content {
+            flex: 1;
+            padding: 2rem 3rem;
+            max-width: 900px;
+        }
+
+        /* SECTIONS */
+        .section {
+            margin-bottom: 3rem;
+            scroll-margin-top: 120px;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            color: var(--gray-900);
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.2rem;
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            color: var(--gray-800);
+            margin: 1.5rem 0 0.7rem;
+        }
+
+        h4 {
+            font-size: 1rem;
+            color: var(--gray-700);
+            margin: 1rem 0 0.5rem;
+        }
+
+        p {
+            margin-bottom: 0.8rem;
+            color: var(--gray-700);
+        }
+
+        /* TABLES */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.88rem;
+            box-shadow: var(--shadow);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        thead th {
+            background: var(--gray-800);
+            color: white;
+            padding: 0.7rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        tbody td {
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        tbody tr:nth-child(even) {
+            background: var(--gray-50);
+        }
+
+        tbody tr:hover {
+            background: var(--primary-light);
+        }
+
+        /* CODE BLOCKS */
+        pre {
+            background: var(--gray-900);
+            color: #e5e7eb;
+            padding: 1.2rem 1.5rem;
+            border-radius: var(--radius);
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            box-shadow: var(--shadow-md);
+            position: relative;
+        }
+
+        pre .lang-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--gray-700);
+            color: var(--gray-300);
+            font-size: 0.65rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 0 var(--radius) 0 var(--radius);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        code {
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+        }
+
+        :not(pre) > code {
+            background: var(--gray-100);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: var(--danger);
+        }
+
+        /* SYNTAX HIGHLIGHTING */
+        .kw { color: #c084fc; }
+        .str { color: #86efac; }
+        .num { color: #fbbf24; }
+        .cmt { color: #6b7280; font-style: italic; }
+        .fn { color: #67e8f9; }
+        .op { color: #f9a8d4; }
+        .var { color: #93c5fd; }
+
+        /* BADGES */
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            border-radius: 99px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .badge-get { background: #dbeafe; color: #1d4ed8; }
+        .badge-post { background: #d1fae5; color: #047857; }
+        .badge-read { background: #e0e7ff; color: #4338ca; }
+        .badge-write { background: #fef3c7; color: #92400e; }
+        .badge-delete { background: #fee2e2; color: #991b1b; }
+
+        /* CARDS */
+        .card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1.2rem 1.5rem;
+            margin: 1rem 0;
+            box-shadow: var(--shadow);
+        }
+
+        .card-title {
+            font-weight: 600;
+            color: var(--gray-800);
+            margin-bottom: 0.5rem;
+        }
+
+        /* INFO BOXES */
+        .info-box {
+            border-left: 4px solid;
+            padding: 0.8rem 1.2rem;
+            margin: 1rem 0;
+            border-radius: 0 var(--radius) var(--radius) 0;
+            font-size: 0.9rem;
+        }
+
+        .info-box.info {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary-dark);
+        }
+
+        .info-box.success {
+            border-color: var(--accent);
+            background: var(--accent-light);
+            color: #065f46;
+        }
+
+        .info-box.warning {
+            border-color: var(--warning);
+            background: var(--warning-light);
+            color: #92400e;
+        }
+
+        .info-box.danger {
+            border-color: var(--danger);
+            background: var(--danger-light);
+            color: #991b1b;
+        }
+
+        .info-box strong {
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        /* DIAGRAM */
+        .diagram {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin: 1rem 0;
+            text-align: center;
+            font-family: 'Cascadia Code', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            white-space: pre;
+            overflow-x: auto;
+            box-shadow: var(--shadow);
+        }
+
+        /* CHECKLIST */
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+
+        .checklist li {
+            padding: 0.5rem 0 0.5rem 2rem;
+            position: relative;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 0.9rem;
+        }
+
+        .checklist li::before {
+            content: "\2610";
+            position: absolute;
+            left: 0.3rem;
+            font-size: 1.1rem;
+            color: var(--primary);
+        }
+
+        /* GRID */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .feature-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem 1.2rem;
+            box-shadow: var(--shadow);
+            transition: transform 0.15s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .feature-card .icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .feature-card h4 {
+            margin: 0 0 0.3rem;
+            font-size: 0.95rem;
+        }
+
+        .feature-card p {
+            font-size: 0.82rem;
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        /* HTTP STATUS */
+        .status-code {
+            display: inline-block;
+            font-weight: 700;
+            font-family: monospace;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .status-200 { background: #d1fae5; color: #065f46; }
+        .status-400 { background: #fef3c7; color: #92400e; }
+        .status-401 { background: #fee2e2; color: #991b1b; }
+        .status-422 { background: #fce7f3; color: #9d174d; }
+        .status-429 { background: #fef3c7; color: #92400e; }
+        .status-500 { background: #fee2e2; color: #991b1b; }
+        .status-503 { background: #e0e7ff; color: #3730a3; }
+
+        /* SECURITY FLOW */
+        .security-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin: 1rem 0;
+        }
+
+        .security-step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.7rem 1rem;
+            background: white;
+            border: 1px solid var(--gray-200);
+        }
+
+        .security-step:first-child {
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+
+        .security-step:last-child {
+            border-radius: 0 0 var(--radius) var(--radius);
+        }
+
+        .security-step .step-num {
+            background: var(--primary);
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .security-step .step-label {
+            font-weight: 600;
+            font-size: 0.88rem;
+            min-width: 140px;
+        }
+
+        .security-step .step-desc {
+            font-size: 0.82rem;
+            color: var(--gray-500);
+        }
+
+        .security-step .step-error {
+            margin-left: auto;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--danger);
+        }
+
+        /* FOOTER */
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--gray-500);
+            font-size: 0.8rem;
+            border-top: 1px solid var(--gray-200);
+            margin-top: 2rem;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .content { padding: 1.5rem; }
+            .header-meta { flex-direction: column; gap: 0.3rem; }
+        }
+
+        @media print {
+            .sidebar { display: none; }
+            .header { position: static; }
+            .content { max-width: 100%; padding: 1rem; }
+            pre { white-space: pre-wrap; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <h1>API-Odoo Middleware</h1>
+    <p>Documentacion General del Sistema - Smart Automat AI</p>
+    <div class="header-meta">
+        <span>Version 1.0</span>
+        <span>Febrero 2026</span>
+        <span>Uso Interno</span>
+    </div>
+</div>
+
+<div class="layout">
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+    <div class="sidebar-title">Navegacion</div>
+    <a href="#intro">Introduccion</a>
+    <a href="#arquitectura">Arquitectura</a>
+    <a href="#estructura">Estructura del Proyecto</a>
+    <a href="#configuracion">Configuracion y Despliegue</a>
+    <a href="#endpoints">API - Endpoints</a>
+    <a href="#modelos">Modelos y Metodos</a>
+    <a href="#seguridad">Seguridad</a>
+    <a href="#ejemplos">Ejemplos de Integracion</a>
+    <a href="#scripts">Scripts Utilitarios</a>
+    <a href="#avanzado">Integraciones Avanzadas</a>
+    <a href="#testing">Testing y Calidad</a>
+    <a href="#errores">Manejo de Errores</a>
+    <a href="#produccion">Despliegue Produccion</a>
+    <a href="#faq">FAQ</a>
+    <a href="#checklist">Checklist</a>
+</nav>
+
+<!-- CONTENT -->
+<main class="content">
+
+<!-- 1. INTRODUCCION -->
+<section class="section" id="intro">
+    <h2>1. Introduccion</h2>
+
+    <h3>Que es API-Odoo Middleware?</h3>
+    <p>API-Odoo es un <strong>middleware universal</strong> desarrollado en Python con FastAPI que actua como puente entre el ERP Odoo y cualquier sistema externo (agentes de IA, hojas de calculo, scripts, bases de datos, aplicaciones web).</p>
+
+    <h3>Problema que Resuelve</h3>
+    <p>Odoo utiliza el protocolo <strong>JSON-RPC</strong> para comunicaciones, que es complejo de implementar directamente. Este middleware simplifica la integracion exponiendo una API REST estandar.</p>
+
+    <h3>Beneficios Clave</h3>
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="icon">&#128268;</div>
+            <h4>Simplicidad</h4>
+            <p>Un solo endpoint POST para todas las operaciones con Odoo</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">&#128274;</div>
+            <h4>Seguridad</h4>
+            <p>API Key + whitelist de modelos y metodos permitidos</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">&#127760;</div>
+            <h4>Universalidad</h4>
+            <p>Funciona con cualquier lenguaje que soporte HTTP</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">&#128200;</div>
+            <h4>Observabilidad</h4>
+            <p>Logging estructurado de cada peticion y operacion</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">&#127970;</div>
+            <h4>Multi-tenant</h4>
+            <p>Soporte para multiples instancias de Odoo simultaneas</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">&#9889;</div>
+            <h4>Rate Limiting</h4>
+            <p>Proteccion contra abuso: 60 req/min por IP</p>
+        </div>
+    </div>
+</section>
+
+<!-- 2. ARQUITECTURA -->
+<section class="section" id="arquitectura">
+    <h2>2. Arquitectura del Sistema</h2>
+
+    <h3>Diagrama de Flujo</h3>
+    <div class="diagram">+-------------------+         +-------------------+         +-------------------+
+|                   |  HTTPS  |                   | JSON-RPC|                   |
+|  Agente / Cliente +--------&gt;+  API-Odoo         +--------&gt;+  Odoo ERP         |
+|  (Python, JS,     |  POST   |  Middleware        |         |  (Instancia)      |
+|   Excel, curl)    |&lt;--------+  (FastAPI)         |&lt;--------+                   |
+|                   |  JSON   |                   |  JSON   |                   |
++-------------------+         +-------------------+         +-------------------+
+                                      |
+                              +-------+-------+
+                              |               |
+                          Validacion      Logging
+                          - API Key       - Timestamp
+                          - Whitelist     - Modelo
+                          - Rate Limit    - Metodo
+                                          - Resultado</div>
+
+    <h3>Componentes Principales</h3>
+    <table>
+        <thead>
+            <tr><th>Componente</th><th>Archivo</th><th>Responsabilidad</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>API REST</td><td><code>api.py</code></td><td>Recibe peticiones HTTP, valida, responde</td></tr>
+            <tr><td>Conector Odoo</td><td><code>odoo_universal.py</code></td><td>Traduce HTTP a JSON-RPC, comunica con Odoo</td></tr>
+            <tr><td>Configuracion</td><td><code>.env</code></td><td>Credenciales y parametros del entorno</td></tr>
+            <tr><td>Scripts</td><td><code>scripts/</code></td><td>Utilidades de sincronizacion y mantenimiento</td></tr>
+            <tr><td>Tests</td><td><code>tests/</code></td><td>Suite de pruebas automatizadas</td></tr>
+            <tr><td>Documentacion</td><td><code>docs/</code></td><td>Guias de integracion y ejemplos</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- 3. ESTRUCTURA -->
+<section class="section" id="estructura">
+    <h2>3. Estructura del Proyecto</h2>
+    <pre><code>API-Odoo/
+|
+|-- api.py                       <span class="cmt"># Aplicacion FastAPI (punto de entrada)</span>
+|-- odoo_universal.py            <span class="cmt"># Clase conector JSON-RPC a Odoo</span>
+|-- config.json                  <span class="cmt"># Ejemplo de configuracion de peticion</span>
+|-- requirements.txt             <span class="cmt"># Dependencias Python</span>
+|-- Dockerfile                   <span class="cmt"># Configuracion de contenedor</span>
+|-- .env.example                 <span class="cmt"># Plantilla de variables de entorno</span>
+|-- .env                         <span class="cmt"># Credenciales reales (NO se sube a git)</span>
+|-- README.md                    <span class="cmt"># Guia rapida de inicio</span>
+|
+|-- docs/
+|   |-- guia-agentes.md          <span class="cmt"># Guia completa de integracion</span>
+|   |-- ejemplos-agentes.md      <span class="cmt"># Ejemplos de codigo multi-lenguaje</span>
+|   |-- power-query-template.md  <span class="cmt"># Integracion con Excel Power Query</span>
+|   +-- etl-sync.md              <span class="cmt"># Sincronizacion ETL a bases de datos</span>
+|
+|-- scripts/
+|   |-- borrar_duplicados.py     <span class="cmt"># Eliminar contactos duplicados</span>
+|   |-- crear_clientes_prueba.py <span class="cmt"># Crear clientes de prueba</span>
+|   |-- excel_a_odoo.py          <span class="cmt"># Sincronizar Excel a Odoo</span>
+|   +-- generar_excel_demo.py    <span class="cmt"># Generar Excel de demostracion</span>
+|
++-- tests/
+    +-- test_api.py              <span class="cmt"># Suite de pruebas unitarias e integracion</span></code></pre>
+</section>
+
+<!-- 4. CONFIGURACION -->
+<section class="section" id="configuracion">
+    <h2>4. Configuracion y Despliegue</h2>
+
+    <h3>Variables de Entorno</h3>
+    <p>Crear archivo <code>.env</code> basado en <code>.env.example</code>:</p>
+    <pre><span class="lang-label">env</span><code><span class="cmt"># Conexion a Odoo</span>
+<span class="var">ODOO_URL</span>=https://tu-instancia.odoo.com
+<span class="var">ODOO_DB</span>=nombre-base-datos
+<span class="var">ODOO_USERNAME</span>=usuario@empresa.com
+<span class="var">ODOO_PASSWORD</span>=contrasenya-segura
+
+<span class="cmt"># Seguridad del middleware</span>
+<span class="var">API_KEY</span>=clave-generada-con-secrets
+
+<span class="cmt"># Modelos permitidos (separados por coma)</span>
+<span class="var">ALLOWED_MODELS</span>=account.move,res.partner,sale.order,purchase.order,stock.picking,product.template
+
+<span class="cmt"># Metodos permitidos (separados por coma)</span>
+<span class="var">ALLOWED_METHODS</span>=search_read,read,fields_get,name_search,create,write,unlink</code></pre>
+
+    <h3>Generar API Key Segura</h3>
+    <pre><span class="lang-label">bash</span><code>python -c <span class="str">"import secrets; print(secrets.token_hex(32))"</span></code></pre>
+
+    <h3>Instalacion Local</h3>
+    <pre><span class="lang-label">bash</span><code><span class="cmt"># 1. Crear entorno virtual</span>
+python -m venv venv
+
+<span class="cmt"># 2. Activar entorno (Windows)</span>
+venv\Scripts\activate
+<span class="cmt"># Linux/Mac: source venv/bin/activate</span>
+
+<span class="cmt"># 3. Instalar dependencias</span>
+pip install -r requirements.txt
+
+<span class="cmt"># 4. Configurar variables de entorno</span>
+cp .env.example .env
+<span class="cmt"># Editar .env con los valores reales</span>
+
+<span class="cmt"># 5. Ejecutar servidor</span>
+uvicorn api:app --reload</code></pre>
+
+    <div class="info-box success">
+        <strong>Servidor listo</strong>
+        El servidor estara disponible en <code>http://localhost:8000</code>. Documentacion Swagger en <code>/docs</code>.
+    </div>
+
+    <h3>Despliegue con Docker</h3>
+    <pre><span class="lang-label">bash</span><code><span class="cmt"># Construir imagen</span>
+docker build -t api-odoo .
+
+<span class="cmt"># Ejecutar contenedor</span>
+docker run --env-file .env -p 8000:8000 api-odoo</code></pre>
+
+    <h3>Dependencias</h3>
+    <table>
+        <thead>
+            <tr><th>Paquete</th><th>Proposito</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>fastapi</code></td><td>Framework web de alto rendimiento</td></tr>
+            <tr><td><code>uvicorn[standard]</code></td><td>Servidor ASGI para FastAPI</td></tr>
+            <tr><td><code>requests</code></td><td>Cliente HTTP para comunicacion con Odoo</td></tr>
+            <tr><td><code>pydantic</code></td><td>Validacion de datos y modelos</td></tr>
+            <tr><td><code>python-dotenv</code></td><td>Carga de variables de entorno desde .env</td></tr>
+            <tr><td><code>slowapi</code></td><td>Rate limiting por IP</td></tr>
+            <tr><td><code>httpx</code></td><td>Cliente HTTP asincrono</td></tr>
+            <tr><td><code>pytest</code></td><td>Framework de pruebas</td></tr>
+            <tr><td><code>pytest-asyncio</code></td><td>Soporte para pruebas asincronas</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- 5. ENDPOINTS -->
+<section class="section" id="endpoints">
+    <h2>5. API - Endpoints y Uso</h2>
+
+    <h3>Endpoints Disponibles</h3>
+    <table>
+        <thead>
+            <tr><th>Metodo</th><th>Ruta</th><th>Auth</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge badge-get">GET</span></td>
+                <td><code>/health</code></td>
+                <td>No</td>
+                <td>Estado del servicio y conexion a Odoo</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-post">POST</span></td>
+                <td><code>/odoo</code></td>
+                <td>Si</td>
+                <td>Operacion universal sobre Odoo</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-get">GET</span></td>
+                <td><code>/docs</code></td>
+                <td>No</td>
+                <td>Documentacion interactiva Swagger UI</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>GET /health</h3>
+    <p>Verifica que el servicio esta activo.</p>
+    <pre><span class="lang-label">bash</span><code>curl https://tu-servidor:8000/health</code></pre>
+    <pre><span class="lang-label">response 200</span><code>{
+  <span class="str">"status"</span>: <span class="str">"ok"</span>
+}</code></pre>
+
+    <h3>POST /odoo</h3>
+    <p>Endpoint universal para todas las operaciones con Odoo.</p>
+
+    <h4>Headers Requeridos</h4>
+    <pre><code>Content-Type: application/json
+X-Api-Key: tu-api-key</code></pre>
+
+    <h4>Cuerpo de la Peticion (OdooRequest)</h4>
+    <table>
+        <thead>
+            <tr><th>Campo</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>model</code></td><td>string</td><td>Si</td><td>Modelo de Odoo (ej: <code>res.partner</code>)</td></tr>
+            <tr><td><code>method</code></td><td>string</td><td>Si</td><td>Metodo a ejecutar (ej: <code>search_read</code>)</td></tr>
+            <tr><td><code>args</code></td><td>list</td><td>No</td><td>Argumentos posicionales (default: <code>[]</code>)</td></tr>
+            <tr><td><code>kwargs</code></td><td>dict</td><td>No</td><td>Argumentos con nombre (default: <code>{}</code>)</td></tr>
+            <tr><td><code>tenant</code></td><td>string</td><td>No</td><td>Instancia multi-tenant (default: <code>"default"</code>)</td></tr>
+        </tbody>
+    </table>
+
+    <h4>Ejemplo Completo</h4>
+    <pre><span class="lang-label">bash</span><code>curl -X POST https://tu-servidor:8000/odoo \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"X-Api-Key: tu-api-key"</span> \
+  -d <span class="str">'{
+    "model": "res.partner",
+    "method": "search_read",
+    "args": [[["customer_rank", ">", 0]]],
+    "kwargs": {"fields": ["id", "name", "email"], "limit": 10}
+  }'</span></code></pre>
+
+    <h4>Respuesta Exitosa</h4>
+    <pre><span class="lang-label">json 200</span><code>{
+  <span class="str">"result"</span>: [
+    {<span class="str">"id"</span>: <span class="num">1</span>, <span class="str">"name"</span>: <span class="str">"Empresa ABC"</span>, <span class="str">"email"</span>: <span class="str">"contacto@abc.com"</span>},
+    {<span class="str">"id"</span>: <span class="num">2</span>, <span class="str">"name"</span>: <span class="str">"Cliente XYZ"</span>, <span class="str">"email"</span>: <span class="str">"info@xyz.com"</span>}
+  ]
+}</code></pre>
+</section>
+
+<!-- 6. MODELOS Y METODOS -->
+<section class="section" id="modelos">
+    <h2>6. Modelos y Metodos Permitidos</h2>
+
+    <h3>Modelos de Odoo Disponibles</h3>
+    <table>
+        <thead>
+            <tr><th>Modelo</th><th>Descripcion</th><th>Campos Comunes</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>res.partner</code></td><td>Contactos y clientes</td><td>id, name, email, phone, vat, customer_rank</td></tr>
+            <tr><td><code>account.move</code></td><td>Facturas y asientos contables</td><td>name, amount_total, state, move_type, partner_id</td></tr>
+            <tr><td><code>sale.order</code></td><td>Pedidos de venta</td><td>name, state, amount_total, partner_id, date_order</td></tr>
+            <tr><td><code>purchase.order</code></td><td>Pedidos de compra</td><td>name, state, amount_total, partner_id</td></tr>
+            <tr><td><code>stock.picking</code></td><td>Movimientos de almacen</td><td>name, state, origin, partner_id, scheduled_date</td></tr>
+            <tr><td><code>product.template</code></td><td>Catalogo de productos</td><td>name, list_price, qty_available, type</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Metodos Permitidos</h3>
+    <table>
+        <thead>
+            <tr><th>Metodo</th><th>Tipo</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>search_read</code></td><td><span class="badge badge-read">Lectura</span></td><td>Buscar y leer registros con filtros</td></tr>
+            <tr><td><code>read</code></td><td><span class="badge badge-read">Lectura</span></td><td>Leer registros por IDs especificos</td></tr>
+            <tr><td><code>fields_get</code></td><td><span class="badge badge-read">Lectura</span></td><td>Obtener definicion de campos de un modelo</td></tr>
+            <tr><td><code>name_search</code></td><td><span class="badge badge-read">Lectura</span></td><td>Buscar registros por nombre (autocompletado)</td></tr>
+            <tr><td><code>create</code></td><td><span class="badge badge-write">Escritura</span></td><td>Crear un nuevo registro</td></tr>
+            <tr><td><code>write</code></td><td><span class="badge badge-write">Escritura</span></td><td>Actualizar registros existentes</td></tr>
+            <tr><td><code>unlink</code></td><td><span class="badge badge-delete">Eliminar</span></td><td>Eliminar registros</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Sintaxis de Filtros (Dominios de Odoo)</h3>
+    <p>Los filtros usan la sintaxis de dominios de Odoo: <code>[["campo", "operador", "valor"]]</code></p>
+    <table>
+        <thead>
+            <tr><th>Operador</th><th>Descripcion</th><th>Ejemplo</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>=</code></td><td>Igual</td><td><code>["state", "=", "posted"]</code></td></tr>
+            <tr><td><code>!=</code></td><td>Diferente</td><td><code>["state", "!=", "cancel"]</code></td></tr>
+            <tr><td><code>&gt;</code></td><td>Mayor que</td><td><code>["amount_total", "&gt;", 1000]</code></td></tr>
+            <tr><td><code>&lt;</code></td><td>Menor que</td><td><code>["amount_total", "&lt;", 500]</code></td></tr>
+            <tr><td><code>&gt;=</code></td><td>Mayor o igual</td><td><code>["customer_rank", "&gt;=", 1]</code></td></tr>
+            <tr><td><code>&lt;=</code></td><td>Menor o igual</td><td><code>["qty_available", "&lt;=", 10]</code></td></tr>
+            <tr><td><code>ilike</code></td><td>Contiene (case insensitive)</td><td><code>["name", "ilike", "tech"]</code></td></tr>
+            <tr><td><code>in</code></td><td>Dentro de lista</td><td><code>["state", "in", ["draft", "posted"]]</code></td></tr>
+            <tr><td><code>not in</code></td><td>Fuera de lista</td><td><code>["state", "not in", ["cancel"]]</code></td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- 7. SEGURIDAD -->
+<section class="section" id="seguridad">
+    <h2>7. Seguridad</h2>
+
+    <h3>Capas de Seguridad</h3>
+    <p>Cada peticion pasa por multiples capas de validacion antes de llegar a Odoo:</p>
+
+    <div class="security-flow">
+        <div class="security-step">
+            <div class="step-num">1</div>
+            <div class="step-label">Rate Limiting</div>
+            <div class="step-desc">Maximo 60 peticiones por minuto por IP</div>
+            <div class="step-error">429</div>
+        </div>
+        <div class="security-step">
+            <div class="step-num">2</div>
+            <div class="step-label">API Key</div>
+            <div class="step-desc">Validacion del token en header X-Api-Key</div>
+            <div class="step-error">401</div>
+        </div>
+        <div class="security-step">
+            <div class="step-num">3</div>
+            <div class="step-label">Whitelist Modelo</div>
+            <div class="step-desc">Solo modelos autorizados en ALLOWED_MODELS</div>
+            <div class="step-error">422</div>
+        </div>
+        <div class="security-step">
+            <div class="step-num">4</div>
+            <div class="step-label">Whitelist Metodo</div>
+            <div class="step-desc">Solo metodos autorizados en ALLOWED_METHODS</div>
+            <div class="step-error">422</div>
+        </div>
+        <div class="security-step">
+            <div class="step-num">5</div>
+            <div class="step-label">Logging</div>
+            <div class="step-desc">Registro de la operacion con timestamp ISO</div>
+            <div class="step-error">--</div>
+        </div>
+        <div class="security-step">
+            <div class="step-num">6</div>
+            <div class="step-label">Odoo</div>
+            <div class="step-desc">Ejecucion de la operacion en el ERP</div>
+            <div class="step-error">503/422</div>
+        </div>
+    </div>
+
+    <h3>Detalle de Mecanismos</h3>
+    <table>
+        <thead>
+            <tr><th>Mecanismo</th><th>Descripcion</th><th>Configuracion</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>API Key</td><td>Token en header <code>X-Api-Key</code></td><td>Variable <code>API_KEY</code> en .env</td></tr>
+            <tr><td>Whitelist modelos</td><td>Solo modelos autorizados</td><td>Variable <code>ALLOWED_MODELS</code> en .env</td></tr>
+            <tr><td>Whitelist metodos</td><td>Solo metodos autorizados</td><td>Variable <code>ALLOWED_METHODS</code> en .env</td></tr>
+            <tr><td>Rate Limiting</td><td>60 peticiones/min por IP</td><td>Configurado en api.py via slowapi</td></tr>
+            <tr><td>Logging</td><td>Registro de cada peticion</td><td>Logs con formato ISO</td></tr>
+            <tr><td>Timeout</td><td>30 segundos maximo a Odoo</td><td>Configurado en odoo_universal.py</td></tr>
+        </tbody>
+    </table>
+
+    <div class="info-box danger">
+        <strong>Buenas Practicas</strong>
+        Nunca subir .env al repositorio. Siempre usar HTTPS en produccion. Rotar la API Key periodicamente. Limitar modelos y metodos al minimo necesario.
+    </div>
+</section>
+
+<!-- 8. EJEMPLOS -->
+<section class="section" id="ejemplos">
+    <h2>8. Ejemplos de Integracion</h2>
+
+    <h3>Python - Consultar Clientes</h3>
+    <pre><span class="lang-label">python</span><code><span class="kw">import</span> requests
+
+<span class="var">API_URL</span> = <span class="str">"https://tu-servidor:8000/odoo"</span>
+<span class="var">API_KEY</span> = <span class="str">"tu-api-key"</span>
+
+response = requests.<span class="fn">post</span>(API_URL, json={
+    <span class="str">"model"</span>: <span class="str">"res.partner"</span>,
+    <span class="str">"method"</span>: <span class="str">"search_read"</span>,
+    <span class="str">"args"</span>: [[[<span class="str">"customer_rank"</span>, <span class="str">"&gt;"</span>, <span class="num">0</span>]]],
+    <span class="str">"kwargs"</span>: {<span class="str">"fields"</span>: [<span class="str">"id"</span>, <span class="str">"name"</span>, <span class="str">"email"</span>], <span class="str">"limit"</span>: <span class="num">10</span>}
+}, headers={<span class="str">"X-Api-Key"</span>: API_KEY})
+
+clientes = response.<span class="fn">json</span>()[<span class="str">"result"</span>]
+<span class="kw">for</span> c <span class="kw">in</span> clientes:
+    <span class="fn">print</span>(<span class="str">f"</span>{c[<span class="str">'name'</span>]} - {c[<span class="str">'email'</span>]}<span class="str">"</span>)</code></pre>
+
+    <h3>Python - Crear Contacto</h3>
+    <pre><span class="lang-label">python</span><code>response = requests.<span class="fn">post</span>(API_URL, json={
+    <span class="str">"model"</span>: <span class="str">"res.partner"</span>,
+    <span class="str">"method"</span>: <span class="str">"create"</span>,
+    <span class="str">"args"</span>: [{
+        <span class="str">"name"</span>: <span class="str">"Nueva Empresa SL"</span>,
+        <span class="str">"email"</span>: <span class="str">"contacto@nuevaempresa.com"</span>,
+        <span class="str">"phone"</span>: <span class="str">"+34 910 000 001"</span>,
+        <span class="str">"vat"</span>: <span class="str">"B12345678"</span>,
+        <span class="str">"customer_rank"</span>: <span class="num">1</span>
+    }]
+}, headers={<span class="str">"X-Api-Key"</span>: API_KEY})
+
+nuevo_id = response.<span class="fn">json</span>()[<span class="str">"result"</span>]
+<span class="fn">print</span>(<span class="str">f"Contacto creado con ID: </span>{nuevo_id}<span class="str">"</span>)</code></pre>
+
+    <h3>Python - Actualizar Contacto</h3>
+    <pre><span class="lang-label">python</span><code>response = requests.<span class="fn">post</span>(API_URL, json={
+    <span class="str">"model"</span>: <span class="str">"res.partner"</span>,
+    <span class="str">"method"</span>: <span class="str">"write"</span>,
+    <span class="str">"args"</span>: [[nuevo_id], {<span class="str">"email"</span>: <span class="str">"nuevo@correo.com"</span>}]
+}, headers={<span class="str">"X-Api-Key"</span>: API_KEY})
+
+<span class="fn">print</span>(<span class="str">"Actualizado:"</span>, response.<span class="fn">json</span>()[<span class="str">"result"</span>])  <span class="cmt"># True</span></code></pre>
+
+    <h3>Python - Eliminar Contacto</h3>
+    <pre><span class="lang-label">python</span><code>response = requests.<span class="fn">post</span>(API_URL, json={
+    <span class="str">"model"</span>: <span class="str">"res.partner"</span>,
+    <span class="str">"method"</span>: <span class="str">"unlink"</span>,
+    <span class="str">"args"</span>: [[nuevo_id]]
+}, headers={<span class="str">"X-Api-Key"</span>: API_KEY})
+
+<span class="fn">print</span>(<span class="str">"Eliminado:"</span>, response.<span class="fn">json</span>()[<span class="str">"result"</span>])  <span class="cmt"># True</span></code></pre>
+
+    <h3>Python - Consultar Facturas</h3>
+    <pre><span class="lang-label">python</span><code>response = requests.<span class="fn">post</span>(API_URL, json={
+    <span class="str">"model"</span>: <span class="str">"account.move"</span>,
+    <span class="str">"method"</span>: <span class="str">"search_read"</span>,
+    <span class="str">"args"</span>: [[[<span class="str">"move_type"</span>, <span class="str">"="</span>, <span class="str">"out_invoice"</span>]]],
+    <span class="str">"kwargs"</span>: {
+        <span class="str">"fields"</span>: [<span class="str">"name"</span>, <span class="str">"partner_id"</span>, <span class="str">"amount_total"</span>, <span class="str">"state"</span>],
+        <span class="str">"limit"</span>: <span class="num">20</span>,
+        <span class="str">"order"</span>: <span class="str">"create_date desc"</span>
+    }
+}, headers={<span class="str">"X-Api-Key"</span>: API_KEY})
+
+facturas = response.<span class="fn">json</span>()[<span class="str">"result"</span>]
+<span class="kw">for</span> f <span class="kw">in</span> facturas:
+    <span class="fn">print</span>(<span class="str">f"</span>{f[<span class="str">'name'</span>]} | {f[<span class="str">'partner_id'</span>][<span class="num">1</span>]} | ${f[<span class="str">'amount_total'</span>]} | {f[<span class="str">'state'</span>]}<span class="str">"</span>)</code></pre>
+
+    <h3>Node.js / JavaScript</h3>
+    <pre><span class="lang-label">javascript</span><code><span class="kw">const</span> response = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">"https://tu-servidor:8000/odoo"</span>, {
+  method: <span class="str">"POST"</span>,
+  headers: {
+    <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>,
+    <span class="str">"X-Api-Key"</span>: <span class="str">"tu-api-key"</span>
+  },
+  body: JSON.<span class="fn">stringify</span>({
+    model: <span class="str">"sale.order"</span>,
+    method: <span class="str">"search_read"</span>,
+    args: [[[<span class="str">"state"</span>, <span class="str">"="</span>, <span class="str">"sale"</span>]]],
+    kwargs: { fields: [<span class="str">"name"</span>, <span class="str">"amount_total"</span>], limit: <span class="num">10</span> }
+  })
+});
+
+<span class="kw">const</span> data = <span class="kw">await</span> response.<span class="fn">json</span>();
+console.<span class="fn">log</span>(data.result);</code></pre>
+
+    <h3>curl</h3>
+    <pre><span class="lang-label">bash</span><code><span class="cmt"># Consultar clientes</span>
+curl -X POST https://tu-servidor:8000/odoo \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"X-Api-Key: tu-api-key"</span> \
+  -d <span class="str">'{"model":"res.partner","method":"search_read","args":[[["customer_rank",">",0]]],"kwargs":{"fields":["name","email"],"limit":5}}'</span>
+
+<span class="cmt"># Verificar salud del servicio</span>
+curl https://tu-servidor:8000/health</code></pre>
+
+    <h3>Cliente Python Reutilizable</h3>
+    <pre><span class="lang-label">python</span><code><span class="kw">import</span> requests
+
+<span class="kw">class</span> <span class="fn">OdooClient</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, url, api_key):
+        self.url = url
+        self.headers = {
+            <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>,
+            <span class="str">"X-Api-Key"</span>: api_key
+        }
+
+    <span class="kw">def</span> <span class="fn">_call</span>(self, model, method, args=<span class="kw">None</span>, kwargs=<span class="kw">None</span>):
+        payload = {
+            <span class="str">"model"</span>: model,
+            <span class="str">"method"</span>: method,
+            <span class="str">"args"</span>: args <span class="kw">or</span> [],
+            <span class="str">"kwargs"</span>: kwargs <span class="kw">or</span> {}
+        }
+        resp = requests.<span class="fn">post</span>(self.url, json=payload, headers=self.headers)
+        resp.<span class="fn">raise_for_status</span>()
+        <span class="kw">return</span> resp.<span class="fn">json</span>()[<span class="str">"result"</span>]
+
+    <span class="kw">def</span> <span class="fn">search_read</span>(self, model, domain=<span class="kw">None</span>, fields=<span class="kw">None</span>, limit=<span class="num">100</span>):
+        <span class="kw">return</span> self.<span class="fn">_call</span>(model, <span class="str">"search_read"</span>,
+            args=[domain <span class="kw">or</span> []],
+            kwargs={<span class="str">"fields"</span>: fields <span class="kw">or</span> [], <span class="str">"limit"</span>: limit})
+
+    <span class="kw">def</span> <span class="fn">create</span>(self, model, values):
+        <span class="kw">return</span> self.<span class="fn">_call</span>(model, <span class="str">"create"</span>, args=[values])
+
+    <span class="kw">def</span> <span class="fn">write</span>(self, model, ids, values):
+        <span class="kw">return</span> self.<span class="fn">_call</span>(model, <span class="str">"write"</span>, args=[ids, values])
+
+    <span class="kw">def</span> <span class="fn">unlink</span>(self, model, ids):
+        <span class="kw">return</span> self.<span class="fn">_call</span>(model, <span class="str">"unlink"</span>, args=[ids])
+
+<span class="cmt"># Uso:</span>
+client = <span class="fn">OdooClient</span>(<span class="str">"https://tu-servidor:8000/odoo"</span>, <span class="str">"tu-api-key"</span>)
+clientes = client.<span class="fn">search_read</span>(<span class="str">"res.partner"</span>,
+    domain=[[<span class="str">"customer_rank"</span>, <span class="str">"&gt;"</span>, <span class="num">0</span>]],
+    fields=[<span class="str">"name"</span>, <span class="str">"email"</span>],
+    limit=<span class="num">10</span>)</code></pre>
+</section>
+
+<!-- 9. SCRIPTS -->
+<section class="section" id="scripts">
+    <h2>9. Scripts Utilitarios</h2>
+
+    <div class="card">
+        <div class="card-title">scripts/crear_clientes_prueba.py</div>
+        <p>Crear un archivo Excel con clientes de prueba y subirlos a Odoo. Verifica duplicados antes de crear.</p>
+        <pre><code>python scripts/crear_clientes_prueba.py</code></pre>
+    </div>
+
+    <div class="card">
+        <div class="card-title">scripts/borrar_duplicados.py</div>
+        <p>Buscar y eliminar contactos duplicados basados en NIF/VAT. Conserva el mas antiguo.</p>
+        <pre><code><span class="cmt"># Previsualizar sin eliminar</span>
+python scripts/borrar_duplicados.py --dry-run
+
+<span class="cmt"># Eliminar duplicados (con confirmacion)</span>
+python scripts/borrar_duplicados.py</code></pre>
+    </div>
+
+    <div class="card">
+        <div class="card-title">scripts/excel_a_odoo.py</div>
+        <p>Sincronizacion bidireccional Excel - Odoo. Hoja "Contactos" actualiza, hoja "Nuevos_Contactos" crea.</p>
+        <pre><code>python scripts/excel_a_odoo.py [archivo.xlsx]</code></pre>
+    </div>
+
+    <div class="card">
+        <div class="card-title">scripts/generar_excel_demo.py</div>
+        <p>Generar Excel de demostracion con 4 hojas: datos actuales, plantilla, instrucciones y configuracion.</p>
+        <pre><code>python scripts/generar_excel_demo.py</code></pre>
+    </div>
+</section>
+
+<!-- 10. AVANZADO -->
+<section class="section" id="avanzado">
+    <h2>10. Integraciones Avanzadas</h2>
+
+    <h3>Excel Power Query</h3>
+    <p>Se puede conectar Excel directamente al middleware usando Power Query M. Ver guia detallada en <code>docs/power-query-template.md</code>.</p>
+    <div class="info-box info">
+        <strong>Flujo Power Query</strong>
+        Abrir Excel &gt; Datos &gt; Obtener datos &gt; Consulta en blanco &gt; Pegar formula M &gt; Los datos se actualizan con un clic.
+    </div>
+
+    <h3>ETL a Base de Datos</h3>
+    <p>Sincronizar datos de Odoo a PostgreSQL/MySQL. Ver <code>docs/etl-sync.md</code>.</p>
+    <div class="diagram">Odoo  ----&gt;  Middleware API  ----&gt;  Script Python  ----&gt;  PostgreSQL / MySQL
+                                         |
+                                 (Extrae, Transforma, Carga)
+                                 - Paginacion automatica
+                                 - Upsert (insert o update)
+                                 - Automatizacion con cron</div>
+
+    <h3>Multi-Tenant</h3>
+    <p>Soporte para multiples instancias de Odoo simultaneas usando el campo <code>tenant</code>:</p>
+    <pre><span class="lang-label">json</span><code>{
+  <span class="str">"model"</span>: <span class="str">"res.partner"</span>,
+  <span class="str">"method"</span>: <span class="str">"search_read"</span>,
+  <span class="str">"args"</span>: [[]],
+  <span class="str">"kwargs"</span>: {<span class="str">"limit"</span>: <span class="num">5</span>},
+  <span class="str">"tenant"</span>: <span class="str">"produccion"</span>
+}</code></pre>
+</section>
+
+<!-- 11. TESTING -->
+<section class="section" id="testing">
+    <h2>11. Testing y Calidad</h2>
+
+    <h3>Ejecutar Tests</h3>
+    <pre><span class="lang-label">bash</span><code>pytest tests/ -v</code></pre>
+
+    <h3>Cobertura de Tests (19+ casos)</h3>
+    <table>
+        <thead>
+            <tr><th>Categoria</th><th>Tests</th><th>Que Valida</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Health</td><td>2</td><td>Respuesta sin autenticacion, estado "ok"</td></tr>
+            <tr><td>Autenticacion</td><td>4</td><td>API Key ausente, incorrecta, correcta, modo dev</td></tr>
+            <tr><td>Whitelist</td><td>4</td><td>Modelo no permitido, metodo no permitido, permitidos, sin whitelist</td></tr>
+            <tr><td>Errores</td><td>3</td><td>Error de conexion (503), ejecucion (422), tenant inexistente (400)</td></tr>
+            <tr><td>Funcionalidad</td><td>2+</td><td>Respuesta contiene "result", tenant default</td></tr>
+        </tbody>
+    </table>
+
+    <div class="info-box success">
+        <strong>Sin dependencia externa</strong>
+        Los tests no requieren conexion real a Odoo. Usan mocks para todas las operaciones.
+    </div>
+</section>
+
+<!-- 12. ERRORES -->
+<section class="section" id="errores">
+    <h2>12. Manejo de Errores</h2>
+
+    <h3>Codigos de Respuesta HTTP</h3>
+    <table>
+        <thead>
+            <tr><th>Codigo</th><th>Significado</th><th>Causa</th><th>Accion</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="status-code status-200">200</span></td>
+                <td>Exito</td>
+                <td>Operacion completada correctamente</td>
+                <td>Procesar campo <code>result</code></td>
+            </tr>
+            <tr>
+                <td><span class="status-code status-400">400</span></td>
+                <td>Bad Request</td>
+                <td>Tenant no configurado</td>
+                <td>Verificar campo <code>tenant</code></td>
+            </tr>
+            <tr>
+                <td><span class="status-code status-401">401</span></td>
+                <td>Unauthorized</td>
+                <td>API Key falta o es incorrecta</td>
+                <td>Verificar header <code>X-Api-Key</code></td>
+            </tr>
+            <tr>
+                <td><span class="status-code status-422">422</span></td>
+                <td>Unprocessable</td>
+                <td>Modelo/metodo no permitido o error Odoo</td>
+                <td>Revisar whitelist y parametros</td>
+            </tr>
+            <tr>
+                <td><span class="status-code status-429">429</span></td>
+                <td>Too Many Requests</td>
+                <td>Excedio 60 req/min</td>
+                <td>Esperar y reintentar con backoff</td>
+            </tr>
+            <tr>
+                <td><span class="status-code status-503">503</span></td>
+                <td>Service Unavailable</td>
+                <td>Odoo no accesible</td>
+                <td>Verificar conexion a Odoo</td>
+            </tr>
+            <tr>
+                <td><span class="status-code status-500">500</span></td>
+                <td>Internal Error</td>
+                <td>Error inesperado del middleware</td>
+                <td>Reportar al equipo</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Formato de Error</h3>
+    <pre><span class="lang-label">json</span><code>{
+  <span class="str">"detail"</span>: <span class="str">"Descripcion del error en texto legible"</span>
+}</code></pre>
+
+    <h3>Patron de Reintento Recomendado</h3>
+    <pre><span class="lang-label">python</span><code><span class="kw">import</span> time
+
+<span class="kw">def</span> <span class="fn">call_with_retry</span>(payload, max_retries=<span class="num">3</span>):
+    <span class="kw">for</span> attempt <span class="kw">in</span> <span class="fn">range</span>(max_retries):
+        response = requests.<span class="fn">post</span>(API_URL, json=payload, headers=headers)
+
+        <span class="kw">if</span> response.status_code == <span class="num">200</span>:
+            <span class="kw">return</span> response.<span class="fn">json</span>()[<span class="str">"result"</span>]
+
+        <span class="kw">if</span> response.status_code == <span class="num">429</span>:  <span class="cmt"># Rate limit</span>
+            wait = <span class="num">2</span> ** attempt  <span class="cmt"># Backoff exponencial: 1s, 2s, 4s</span>
+            time.<span class="fn">sleep</span>(wait)
+            <span class="kw">continue</span>
+
+        <span class="kw">if</span> response.status_code == <span class="num">503</span>:  <span class="cmt"># Odoo no disponible</span>
+            time.<span class="fn">sleep</span>(<span class="num">5</span>)
+            <span class="kw">continue</span>
+
+        <span class="cmt"># Otros errores: no reintentar</span>
+        response.<span class="fn">raise_for_status</span>()
+
+    <span class="kw">raise</span> <span class="fn">Exception</span>(<span class="str">"Maximo de reintentos alcanzado"</span>)</code></pre>
+</section>
+
+<!-- 13. PRODUCCION -->
+<section class="section" id="produccion">
+    <h2>13. Despliegue en Produccion</h2>
+
+    <h3>Requisitos</h3>
+    <table>
+        <thead>
+            <tr><th>Requisito</th><th>Detalle</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>HTTPS</td><td>Certificado SSL obligatorio</td></tr>
+            <tr><td>Reverse Proxy</td><td>Nginx o Caddy recomendado</td></tr>
+            <tr><td>IP Publica</td><td>Servidor accesible desde los clientes</td></tr>
+            <tr><td>Secretos</td><td>Gestion segura de variables de entorno</td></tr>
+            <tr><td>API Key</td><td>Token de 256 bits (64 caracteres hexadecimales)</td></tr>
+            <tr><td>Monitoreo</td><td>Healthcheck periodico a /health</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Ejemplo Nginx</h3>
+    <pre><span class="lang-label">nginx</span><code>server {
+    listen <span class="num">443</span> ssl;
+    server_name api-odoo.tu-empresa.com;
+
+    ssl_certificate /etc/ssl/certs/tu-cert.pem;
+    ssl_certificate_key /etc/ssl/private/tu-key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}</code></pre>
+
+    <h3>Docker Compose</h3>
+    <pre><span class="lang-label">yaml</span><code>version: <span class="str">"3.8"</span>
+services:
+  api-odoo:
+    build: .
+    env_file: .env
+    ports:
+      - <span class="str">"8000:8000"</span>
+    restart: unless-stopped
+    healthcheck:
+      test: [<span class="str">"CMD"</span>, <span class="str">"curl"</span>, <span class="str">"-f"</span>, <span class="str">"http://localhost:8000/health"</span>]
+      interval: 30s
+      timeout: 10s
+      retries: 3</code></pre>
+</section>
+
+<!-- 14. FAQ -->
+<section class="section" id="faq">
+    <h2>14. FAQ - Preguntas Frecuentes</h2>
+
+    <h3>Conexion y Autenticacion</h3>
+
+    <div class="card">
+        <div class="card-title">Como obtengo mi API Key?</div>
+        <p>El administrador la genera con <code>python -c "import secrets; print(secrets.token_hex(32))"</code> y la configura en el <code>.env</code>.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Puedo usar el middleware sin API Key?</div>
+        <p>Si, en modo desarrollo. Si <code>API_KEY</code> esta vacia en .env, no se requiere autenticacion. <strong>Nunca hacer esto en produccion.</strong></p>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Soporta multiples instancias de Odoo?</div>
+        <p>Si, mediante el campo <code>tenant</code> en cada peticion. Cada tenant tiene sus propias credenciales.</p>
+    </div>
+
+    <h3>Datos y Modelos</h3>
+
+    <div class="card">
+        <div class="card-title">Como se que campos tiene un modelo?</div>
+        <p>Usar el metodo <code>fields_get</code>:</p>
+        <pre><code>{"model": "res.partner", "method": "fields_get", "kwargs": {"attributes": ["string", "type"]}}</code></pre>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Puedo acceder a modelos que no estan en la whitelist?</div>
+        <p>No. Se recibira un error 422. Contactar al administrador para agregar el modelo.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Hay limite de registros por consulta?</div>
+        <p>Use el parametro <code>limit</code> en kwargs. Se recomienda no superar 500 registros por peticion.</p>
+    </div>
+
+    <h3>Errores Comunes</h3>
+
+    <div class="card">
+        <div class="card-title">Error 503 - Service Unavailable</div>
+        <p>El middleware no puede conectar con Odoo. Verificar que la URL es correcta y que el servicio esta activo.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Error 429 - Too Many Requests</div>
+        <p>Se excedio el limite de 60 peticiones por minuto. Implementar backoff exponencial en el cliente.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Error 422 - "modelo no permitido"</div>
+        <p>El modelo solicitado no esta en la whitelist. Verificar <code>ALLOWED_MODELS</code> en .env.</p>
+    </div>
+</section>
+
+<!-- 15. CHECKLIST -->
+<section class="section" id="checklist">
+    <h2>15. Checklist de Integracion</h2>
+    <p>Antes de poner una integracion en produccion, verificar:</p>
+
+    <ul class="checklist">
+        <li>URL del middleware es correcta y accesible via HTTPS</li>
+        <li>API Key esta configurada y funciona</li>
+        <li>Endpoint /health responde {"status": "ok"}</li>
+        <li>Los modelos necesarios estan en la whitelist</li>
+        <li>Los metodos necesarios estan en la whitelist</li>
+        <li>Las consultas de lectura (search_read) funcionan correctamente</li>
+        <li>Las operaciones de escritura (create, write) funcionan si son necesarias</li>
+        <li>Se implemento manejo de errores para todos los codigos HTTP</li>
+        <li>Se implemento patron de reintento con backoff exponencial</li>
+        <li>El rate limiting (60 req/min) es suficiente para el caso de uso</li>
+        <li>Los logs del middleware se monitorean</li>
+        <li>Se tiene un plan de contingencia si Odoo no esta disponible</li>
+        <li>La API Key no esta hardcodeada en el codigo fuente</li>
+    </ul>
+</section>
+
+<!-- FOOTER -->
+<div class="footer">
+    <p><strong>API-Odoo Middleware</strong> - Documentacion General v1.0</p>
+    <p>Smart Automat AI - Febrero 2026 - Uso Interno</p>
+</div>
+
+</main>
+</div>
+
+<!-- SIDEBAR ACTIVE LINK SCRIPT -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const links = document.querySelectorAll('.sidebar a');
+        const sections = document.querySelectorAll('.section');
+
+        function setActive() {
+            let current = '';
+            sections.forEach(function(section) {
+                const top = section.offsetTop - 150;
+                if (window.scrollY >= top) {
+                    current = section.getAttribute('id');
+                }
+            });
+            links.forEach(function(link) {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        window.addEventListener('scroll', setActive);
+        setActive();
+
+        // Smooth scroll
+        links.forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                var target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

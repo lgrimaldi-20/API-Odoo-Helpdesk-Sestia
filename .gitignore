@@ -1,0 +1,28 @@
+# Entorno Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Artefactos de test
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Distribucion
+dist/
+build/
+*.egg-info/

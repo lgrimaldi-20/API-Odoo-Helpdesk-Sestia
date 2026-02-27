@@ -1,0 +1,6 @@
+{
+  "model": "account.move",
+  "method": "search_read",
+  "args": [[["move_type", "=", "out_invoice"]]],
+  "kwargs": {"fields": ["name", "amount_total", "state"], "limit": 10}
+}
