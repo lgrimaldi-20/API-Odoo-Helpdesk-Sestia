@@ -11,6 +11,10 @@ __pycache__/
 .env.*
 !.env.example
 
+# Base de datos de control local (SQLite)
+*.db
+control.db
+
 # Artefactos de test
 .pytest_cache/
 htmlcov/
