@@ -1483,18 +1483,38 @@ def contar_volumenes(
     return resumen
 
 
+# Cabecera de cada catalogo, para poder emitirla aunque no haya ninguna fila:
+# un CSV totalmente vacio no le dice al importador que columnas esperaba.
+CABECERAS_CATALOGOS = {
+    "equipos": ["nombre", "descripcion"],
+    "etapas": ["equipo", "etapa", "orden", "es_inicial", "es_cierre"],
+    "categorias": ["nombre"],
+    "subcategorias": ["nombre"],
+    "etiquetas": ["nombre"],
+    "usuarios": ["nombre", "email", "activo"],
+}
+
+
 def catalogos_a_zip(catalogos: dict) -> bytes:
-    """Empaqueta los catalogos como un ZIP con un CSV por catalogo."""
+    """
+    Empaqueta los catalogos como un ZIP con un CSV por catalogo.
+
+    Los catalogos sin filas se emiten con su cabecera (no vacios): asi el
+    importador distingue "catalogo vacio" de "archivo corrupto o incompleto".
+    """
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for nombre, filas in catalogos.items():
             csv_buffer = io.StringIO()
-            if filas:
-                writer = csv.DictWriter(
-                    csv_buffer, fieldnames=list(filas[0].keys()),
-                    quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n",
-                )
-                writer.writeheader()
-                writer.writerows(filas)
+            columnas = (
+                list(filas[0].keys()) if filas
+                else CABECERAS_CATALOGOS.get(nombre, ["nombre"])
+            )
+            writer = csv.DictWriter(
+                csv_buffer, fieldnames=columnas,
+                quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n",
+            )
+            writer.writeheader()
+            writer.writerows(filas)
             zf.writestr(f"{nombre}.csv", csv_buffer.getvalue())
     return buffer.getvalue()

@@ -838,6 +838,16 @@ class TestCatalogos:
         assert {t["nombre"] for t in cat["etiquetas"]} == {"urgente", "vip"}
         assert cat["usuarios"][0]["email"] == "ana@empresa.com"
 
+    def test_catalogo_vacio_conserva_la_cabecera(self, odoo_helpdesk):
+        # Un CSV totalmente vacio no dice al importador que columnas esperaba.
+        odoo_helpdesk.datos["helpdesk.tag"] = []
+        zf = zipfile.ZipFile(io.BytesIO(
+            hx.catalogos_a_zip(exportar_catalogos(odoo_helpdesk))))
+        # Sin etiquetas queda solo la cabecera, no un archivo vacio.
+        assert zf.read("etiquetas.csv").decode().strip() == "nombre"
+        # Los catalogos con datos siguen saliendo completos.
+        assert zf.read("subcategorias.csv").decode().strip() == "nombre\r\nPortatil"
+
     def test_etapas_marcan_inicial_y_cierre(self, odoo_helpdesk):
         etapas = {e["etapa"]: e for e in exportar_catalogos(odoo_helpdesk)["etapas"]}
         assert etapas["Nuevo"]["es_inicial"] is True
