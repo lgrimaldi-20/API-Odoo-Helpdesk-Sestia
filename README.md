@@ -72,6 +72,12 @@ El middleware **no escribe nada** en Odoo en esta capa.
 
 ### Orden de trabajo
 
+> **Antes de empezar:** contrasta el total de `/volumenes` con el que ve un
+> administrador en la interfaz de Odoo. El middleware ve lo que su usuario tiene
+> permitido ver: si las reglas de registro le limitan los equipos, la
+> exportacion saldra incompleta **sin dar ningun error**, y el conteo estara
+> filtrado igual, asi que no lo detecta por si solo.
+
 ```bash
 # 1. Volumenes: cuantos tickets, mensajes y adjuntos hay (y cuanto pesan).
 #    Sirve para acordar el alcance del historial y si hay que trocear el ZIP.

@@ -452,9 +452,18 @@ def _leer_tickets(
     ]
     for opcional in (CAMPO_REF_PREFERIDO, "partner_name", "partner_email",
                      "partner_phone", "partner_id", "sla_deadline",
-                     "category_id", "subcategory_id"):
+                     "subcategory_id"):
         if tiene(opcional):
             campos.append(opcional)
+
+    # La categoria/tipo se llama distinto segun la version y la personalizacion:
+    # el Helpdesk estandar de Odoo usa `ticket_type_id` (modelo
+    # helpdesk.ticket.type); algunas instalaciones anaden `category_id`.
+    campo_categoria = next(
+        (c for c in ("ticket_type_id", "category_id") if tiene(c)), None
+    )
+    if campo_categoria:
+        campos.append(campo_categoria)
 
     personalizados = _campos_personalizados(campos_disponibles)
     campos.extend(personalizados)
@@ -518,7 +527,7 @@ def _leer_tickets(
             "etapa": _nombre_de_m2o(r.get("stage_id")),
             "prioridad": r.get("priority") or "0",
             "estado": estado,
-            "categoria": _nombre_de_m2o(r.get("category_id")),
+            "categoria": _nombre_de_m2o(r.get(campo_categoria)) if campo_categoria else "",
             "subcategoria": _nombre_de_m2o(r.get("subcategory_id")),
             "etiquetas": etiquetas,
             "asignado_email": emails.get(_id_de_m2o(r.get("user_id")), ""),

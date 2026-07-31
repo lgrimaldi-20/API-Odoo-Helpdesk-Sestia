@@ -427,6 +427,25 @@ class TestCamposExtra:
         assert filas["HT-0001"]["x_studio_origen"] == "telefono"
         assert filas["HT-0002"]["x_studio_origen"] == ""  # False -> vacio
 
+    def test_categoria_desde_ticket_type_id_estandar(self, odoo_helpdesk):
+        # El Helpdesk estandar de Odoo llama al campo `ticket_type_id`, no
+        # `category_id`: con el nombre estandar la categoria debe salir igual.
+        odoo_helpdesk.fields["helpdesk.ticket"].pop("category_id")
+        odoo_helpdesk.fields["helpdesk.ticket"]["ticket_type_id"] = {"type": "many2one"}
+        for t in odoo_helpdesk.datos["helpdesk.ticket"]:
+            t["ticket_type_id"] = t.pop("category_id")
+
+        filas = {f["odoo_ref"]: f for f in csv.DictReader(
+            io.StringIO(exportar_tickets_csv(odoo_helpdesk)))}
+        assert filas["HT-0001"]["categoria"] == "Hardware"
+
+    def test_categoria_vacia_si_no_existe_el_campo(self, odoo_helpdesk):
+        odoo_helpdesk.fields["helpdesk.ticket"].pop("category_id")
+        for t in odoo_helpdesk.datos["helpdesk.ticket"]:
+            t.pop("category_id", None)
+        filas = list(csv.DictReader(io.StringIO(exportar_tickets_csv(odoo_helpdesk))))
+        assert all(f["categoria"] == "" for f in filas)
+
     def test_avisa_de_cerrado_sin_fecha_cierre(self, odoo_helpdesk, caplog):
         # HT-0002 esta cerrado; le quitamos close_date para provocar el aviso.
         odoo_helpdesk.datos["helpdesk.ticket"][1]["close_date"] = False
