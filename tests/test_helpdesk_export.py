@@ -86,16 +86,14 @@ class FakeOdoo:
 
 def _normalizar_dominio(dominio):
     """
-    El core pasa el dominio como primer arg posicional: unas veces envuelto en
-    una lista extra ([[cond, cond]]) y otras directo ([cond, cond]). Desenvuelve
-    hasta quedarse con la lista de condiciones (cada una es [campo, op, valor]).
+    Devuelve la lista de condiciones tal cual la recibe.
+
+    OJO: este fake NO desenvuelve niveles extra a proposito. Antes lo hacia, y
+    eso enmascaraba un bug real: `execute(model, method, *args)` ya empaqueta
+    los posicionales, asi que pasar el dominio como [[cond]] llega a Odoo como
+    [[[cond]]] y su parser falla con 'tuple index out of range'. Aceptar ambas
+    formas hacia pasar los tests con codigo que reventaba contra Odoo real.
     """
-    if (
-        isinstance(dominio, list) and len(dominio) == 1
-        and isinstance(dominio[0], list)
-        and (not dominio[0] or isinstance(dominio[0][0], (list, tuple)))
-    ):
-        return dominio[0]
     return dominio
 
 
@@ -115,22 +113,61 @@ def _valor_campo(registro, campo):
     return v
 
 
+def _cumple(registro, cond) -> bool:
+    """Evalua una condicion suelta ('campo', operador, valor) sobre un registro."""
+    campo, op, valor = cond
+    actual = _valor_campo(registro, campo)
+    if op == "=":
+        return actual == valor
+    if op == "!=":
+        return actual != valor
+    if op == "in":
+        return actual in valor
+    if op == ">=":
+        return str(actual or "") >= valor
+    if op == "<=":
+        return str(actual or "") <= valor
+    return True
+
+
 def _filtrar(registros, dominio):
-    """Filtro minimo: soporta '=', 'in' y los comparadores '>=' / '<='."""
-    out = registros
-    for cond in dominio:
-        if not isinstance(cond, (list, tuple)) or len(cond) != 3:
-            continue
-        campo, op, valor = cond
-        if op == "=":
-            out = [r for r in out if _valor_campo(r, campo) == valor]
-        elif op == "in":
-            out = [r for r in out if _valor_campo(r, campo) in valor]
-        elif op == ">=":
-            out = [r for r in out if str(_valor_campo(r, campo) or "") >= valor]
-        elif op == "<=":
-            out = [r for r in out if str(_valor_campo(r, campo) or "") <= valor]
-    return out
+    """
+    Filtro minimo con soporte de notacion polaca prefija, como Odoo: los
+    operadores '|' (OR), '&' (AND) y '!' (NOT) preceden a sus operandos.
+    Necesario porque el catalogo de usuarios usa un dominio con '|' para incluir
+    a los archivados que aparecen referenciados en algun ticket.
+    """
+    condiciones = [c for c in dominio if isinstance(c, (list, tuple, str))]
+    if not condiciones:
+        return registros
+
+    def evaluar(pos, registro):
+        """Devuelve (resultado, siguiente_posicion) evaluando desde `pos`."""
+        item = condiciones[pos]
+        if item == "|":
+            izq, pos = evaluar(pos + 1, registro)
+            der, pos = evaluar(pos, registro)
+            return izq or der, pos
+        if item == "&":
+            izq, pos = evaluar(pos + 1, registro)
+            der, pos = evaluar(pos, registro)
+            return izq and der, pos
+        if item == "!":
+            val, pos = evaluar(pos + 1, registro)
+            return not val, pos
+        if isinstance(item, (list, tuple)) and len(item) == 3:
+            return _cumple(registro, item), pos + 1
+        return True, pos + 1
+
+    def acepta(registro):
+        # Varias expresiones consecutivas se combinan con AND implicito (Odoo).
+        pos, resultado = 0, True
+        while pos < len(condiciones):
+            val, pos = evaluar(pos, registro)
+            resultado = resultado and val
+        return resultado
+
+    return [r for r in registros if acepta(r)]
 
 
 @pytest.fixture()

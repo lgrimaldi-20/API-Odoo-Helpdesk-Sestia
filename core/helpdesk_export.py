@@ -470,7 +470,7 @@ def _leer_tickets(
 
     try:
         registros = odoo.execute(
-            modelo, "search_read", [_dominio_tickets(desde, hasta)],
+            modelo, "search_read", _dominio_tickets(desde, hasta),
             fields=campos, limit=(limite or 0), order="id",
         )
     except OdooExecutionError as e:
@@ -620,7 +620,7 @@ def _ids_tickets(
     """
     modelo = _detectar_modelo_ticket(odoo)
     ids = odoo.execute(
-        modelo, "search", [_dominio_tickets(desde, hasta)],
+        modelo, "search", _dominio_tickets(desde, hasta),
         limit=(limite or 0), order="id",
     )
     return ids
@@ -1275,7 +1275,7 @@ def _catalogo_usuarios(odoo: OdooUniversalAPI) -> list[dict]:
     ]
     try:
         usuarios = odoo.execute(
-            "res.users", "search_read", [dominio],
+            "res.users", "search_read", dominio,
             fields=["name", "login", "email", "active"], order="name",
             context={"active_test": False},  # sin esto Odoo oculta los archivados
         )
@@ -1427,7 +1427,7 @@ def contar_volumenes(
     dominio = _dominio_tickets(desde, hasta)
 
     try:
-        ids_tickets = odoo.execute(modelo, "search", [dominio], order="id")
+        ids_tickets = odoo.execute(modelo, "search", dominio, order="id")
     except OdooExecutionError as e:
         raise HelpdeskExportError(f"No se pudieron contar los tickets: {e}") from e
 
