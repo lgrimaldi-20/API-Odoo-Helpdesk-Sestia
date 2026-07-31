@@ -1,16 +1,23 @@
-# API-Odoo Middleware
+# API-Odoo | Exportación de Helpdesk
 
-Middleware en Python/FastAPI para conectar Odoo ERP con sistemas externos
-(Excel, scripts, agentes de IA, bases de datos).
+Middleware en Python/FastAPI que **exporta los tickets de Odoo Helpdesk** para
+migrarlos al módulo Helpdesk de **SESTIA**, según la especificación de migración
+(`migracion-tickets-odoo-helpdesk.pdf`).
 
-Ofrece dos capas:
+Ofrece dos capas, ambas de **solo lectura**:
 
-- **Proxy JSON-RPC genérico** (`/odoo`): ejecuta cualquier método sobre cualquier
-  modelo de Odoo.
-- **Capa contable con estado** (`/facturas`, `/pagos`, `/conciliar`): crea y postea
-  facturas y pagos de forma **idempotente**, los **concilia**, valida que los
-  **totales/impuestos** cuadren, y puede procesar en **segundo plano** con
-  reintentos y *rollback* lógico.
+- **Exportación de Helpdesk** (`/helpdesk/export/*`): genera los tres archivos de
+  migración (tickets, historial, adjuntos) más los catálogos previos y los
+  conteos de volumen.
+- **Proxy JSON-RPC genérico** (`/odoo`): ejecuta consultas sobre cualquier modelo
+  de Odoo. Sirve para inspeccionar la instancia del cliente durante la migración
+  (qué campos existen, conteos, validar catálogos) sin escribir código.
+
+> **Este middleware no escribe nada en Odoo.** La capa contable del middleware
+> original (facturas, pagos, conciliación, inventario) se retiró de este repo:
+> no forma parte de la especificación de migración y añadía superficie de
+> escritura sobre el Odoo de producción del cliente. Sigue disponible en el
+> repositorio original **API-Odoo**.
 
 ## Inicio rapido
 
@@ -46,81 +53,94 @@ curl -X POST http://localhost:8000/odoo \
        "kwargs": {"fields": ["name", "email"], "limit": 5}}'
 ```
 
-## Capa contable (facturas, pagos, conciliacion)
+## Exportacion de Helpdesk (migracion Odoo -> SESTIA)
 
-Ademas del proxy `/odoo`, el middleware sincroniza facturas y pagos con estado
-propio e idempotencia. El flujo interno es:
+Genera los archivos que necesita la importacion de tickets en el modulo Helpdesk
+de SESTIA, segun la especificacion de migracion (`migracion-tickets-odoo-helpdesk.pdf`).
 
-```
-state store (idempotencia) -> mapper (traduce) -> create + action_post (Odoo)
-```
+Todos los endpoints son **GET de solo lectura**: leen Odoo y devuelven un archivo.
+El middleware **no escribe nada** en Odoo en esta capa.
 
-- **Idempotencia**: cada registro de origen se identifica por `(entidad, id_origen)`.
-  Reenviar el mismo registro devuelve el `id_odoo` ya asignado sin duplicar.
-- **Mapeo declarativo**: la traduccion de campos y la resolucion de claves
-  foraneas (p.ej. NIF -> `res.partner`) se configura en `core/mappings.yaml`,
-  sin tocar codigo.
-- **Conciliacion**: cruza los apuntes contables de una factura y un pago.
-- **Impuestos**: valida que el total en Odoo coincida al centimo con el de origen.
-- **Estado y auditoria**: consultable en `GET /estado/{entidad}/{id_origen}`;
-  bitacora completa en la base de datos de control.
+| Archivo | Endpoint | Contenido |
+|---------|----------|-----------|
+| — | `/helpdesk/export/volumenes` | Conteos previos (JSON). **Empezar por aqui** |
+| `tickets.csv` | `/helpdesk/export/tickets.csv` | Un ticket por fila (UTF-8, RFC 4180) |
+| `historial.jsonl` | `/helpdesk/export/historial.jsonl` | Un mensaje del chatter por linea |
+| `adjuntos.zip` | `/helpdesk/export/adjuntos.zip` | Binarios + `manifiesto_adjuntos.csv` |
+| catalogos | `/helpdesk/export/catalogos.zip` | Un CSV por catalogo (o `/catalogos` en JSON) |
 
-```bash
-# Crear + postear una factura (idempotente)
-curl -X POST http://localhost:8000/facturas \
-  -H "X-Api-Key: tu-clave" \
-  -d '{"registro": {"factura_id": "F-100", "cliente_nif": "B123",
-                    "fecha": "2026-01-15", "total": 121.00}}'
-
-# Conciliar factura y pago (por sus IDs de Odoo)
-curl -X POST http://localhost:8000/conciliar \
-  -H "X-Api-Key: tu-clave" \
-  -d '{"factura_id_odoo": 42, "pago_id_odoo": 88}'
-```
-
-## Inventario (ajuste de existencias)
-
-Permite dar entrada y salida de unidades de productos que ya existen en Odoo.
-No escribe la cantidad "a mano": usa el mecanismo oficial de **ajuste de
-inventario** (`stock.quant` + `action_apply_inventory`), de modo que Odoo genera
-el movimiento correspondiente y el cambio queda trazable.
-
-Modos (campo `modo`):
-
-| Modo | Efecto |
-|------|--------|
-| `fijar` (por defecto) | La existencia final sera exactamente `cantidad` (conteo real) |
-| `incrementar` | Suma `cantidad` a lo que ya hay (entrada) |
-| `decrementar` | Resta `cantidad` (salida). Falla si dejaria el stock negativo |
+### Orden de trabajo
 
 ```bash
-# Entrada de 5 unidades del producto con referencia ABC-123
-curl -X POST http://localhost:8000/stock/ajustar \
-  -H "X-Api-Key: tu-clave" \
-  -d '{"registro": {"ajuste_id": "AJ-001", "producto_ref": "ABC-123",
-                    "cantidad": 5, "modo": "incrementar",
-                    "motivo": "Recepcion proveedor"}}'
+# 1. Volumenes: cuantos tickets, mensajes y adjuntos hay (y cuanto pesan).
+#    Sirve para acordar el alcance del historial y si hay que trocear el ZIP.
+curl "http://localhost:8000/helpdesk/export/volumenes" -H "X-Api-Key: tu-clave"
 
-# Consultar existencia actual (solo lectura)
-curl -X POST http://localhost:8000/stock/consultar \
-  -H "X-Api-Key: tu-clave" \
-  -d '{"registro": {"producto_ref": "ABC-123"}}'
+# 2. Catalogos: equipos, etapas, categorias, etiquetas y usuarios.
+#    Deben precargarse en SESTIA ANTES de importar (se resuelven por nombre,
+#    y los usuarios por email).
+curl -o catalogos.zip "http://localhost:8000/helpdesk/export/catalogos.zip" \
+  -H "X-Api-Key: tu-clave"
+
+# 3. Muestra de 20 tickets para validar estructura y encoding.
+curl -o tickets.csv "http://localhost:8000/helpdesk/export/tickets.csv?limite=20" \
+  -H "X-Api-Key: tu-clave"
+
+# 4. Exportacion completa (los tres archivos).
+curl -o tickets.csv    "http://localhost:8000/helpdesk/export/tickets.csv"     -H "X-Api-Key: tu-clave"
+curl -o historial.jsonl "http://localhost:8000/helpdesk/export/historial.jsonl" -H "X-Api-Key: tu-clave"
+curl -o adjuntos.zip   "http://localhost:8000/helpdesk/export/adjuntos.zip"    -H "X-Api-Key: tu-clave"
 ```
 
-**Importante:** el campo `ajuste_id` es obligatorio y hace el ajuste idempotente.
-Reenviar el mismo `ajuste_id` no vuelve a aplicarlo — sin esto, un `incrementar`
-repetido descuadraria el inventario.
+### Fecha de corte y re-exportacion incremental
 
-El producto se identifica por su referencia interna (`producto_ref` →
-`default_code`) o por `producto_id_odoo`. La ubicacion es opcional: si no se
-indica, se usa la primera ubicacion interna del almacen.
+Tras la exportacion completa, los tickets que se sigan creando o modificando en
+Odoo se recuperan con una segunda pasada acotada por fecha:
 
-### Procesamiento en segundo plano (cola)
+```bash
+# Solo lo creado o MODIFICADO desde la fecha de corte.
+curl -o tickets-incremental.csv \
+  "http://localhost:8000/helpdesk/export/tickets.csv?desde=2026-08-01" \
+  -H "X-Api-Key: tu-clave"
+```
 
-`/facturas`, `/pagos` y `/stock/ajustar` aceptan `"async": true` para encolar en background y
-responder con un `task_id`; el resultado se consulta luego en `/estado/...`.
-La cola usa **Celery + Redis**. Si `CELERY_BROKER_URL` esta vacio, las tareas
-corren en **modo eager** (sincrono inline, sin worker) — util en desarrollo.
+El filtro es sobre `write_date`, no `create_date`, para que arrastre tambien los
+tickets **modificados**. La importacion no duplica: cada ticket lleva su
+`odoo_ref` de Odoo. El mismo `?desde=`/`?hasta=` sirve para **trocear** una
+entrega de adjuntos demasiado grande.
+
+### Parametros
+
+| Parametro | Endpoints | Efecto |
+|-----------|-----------|--------|
+| `tenant` | todos | Instancia de Odoo (por defecto `default`) |
+| `limite` | los tres archivos | Maximo de tickets (para la muestra) |
+| `desde` / `hasta` | los tres archivos y `volumenes` | Ventana ISO 8601 sobre `write_date` |
+| `etapas_cierre` | `tickets.csv`, `historial.jsonl` | Etapas de cierre por nombre, separadas por coma |
+| `incluir_tracking` | `historial.jsonl` | Incluye las notificaciones automaticas (por defecto **no**) |
+| `recortar_citas` | `historial.jsonl` | Recorta el hilo citado y las firmas (por defecto **si**) |
+| `solo_abiertos` | `historial.jsonl` | Historial solo de los tickets abiertos |
+| `incluir_embebidas` | `adjuntos.zip` | Rescata las imagenes embebidas en los mensajes (por defecto **si**) |
+
+### Decisiones de la exportacion
+
+- **Estado `open`/`closed`**: se deriva del campo `fold` de la etapa (las etapas
+  plegadas en el kanban se toman como de cierre). Se puede forzar con una lista
+  explicita de nombres: variable `HELPDESK_ETAPAS_CIERRE` en `.env` o
+  `?etapas_cierre=Resuelto,Cancelado` por peticion.
+- **Fechas**: ISO 8601 con offset explicito. Odoo las devuelve en UTC sin zona,
+  asi que se emiten con sufijo `Z`.
+- **Cuerpo de los mensajes**: se entrega en **texto plano** (el HTML de Odoo se
+  limpia). Por defecto se recorta el hilo citado y las firmas de los correos.
+- **Imagenes embebidas**: las rutas `/web/image/...` mueren al apagar Odoo, asi
+  que las imagenes incrustadas en los mensajes se extraen al ZIP de adjuntos y el
+  mensaje conserva la referencia para que la importacion las vuelva a enlazar.
+- **Campos personalizados**: los campos `x_*` del Odoo del cliente se detectan
+  solos y se anaden como columnas extra al final de `tickets.csv`.
+- **Usuarios**: se exportan por **email**, no por nombre ni por ID de Odoo. Los
+  emails deben coincidir con los de los usuarios en SESTIA.
+- **Memoria**: los binarios de los adjuntos se leen de Odoo por lotes, no todos a
+  la vez, de modo que una migracion grande no agota la memoria del proceso.
 
 ## Seguridad
 
@@ -136,13 +156,13 @@ corren en **modo eager** (sincrono inline, sin worker) — util en desarrollo.
 | Metodo | Ruta | Auth | Descripcion |
 |--------|------|------|-------------|
 | GET | `/health` | No | Estado del servicio y conexion Odoo |
-| POST | `/odoo` | Si | Ejecutar operacion generica en Odoo |
-| POST | `/facturas` | Si | Crear + postear factura (idempotente) |
-| POST | `/pagos` | Si | Crear + postear pago (idempotente) |
-| POST | `/conciliar` | Si | Conciliar una factura con un pago |
-| POST | `/stock/ajustar` | Si | Ajustar existencias de un producto (idempotente) |
-| POST | `/stock/consultar` | Si | Consultar existencias de un producto |
-| GET | `/estado/{entidad}/{id_origen}` | Si | Estado de sincronizacion de un registro |
+| POST | `/odoo` | Si | Consulta generica sobre un modelo de Odoo |
+| GET | `/helpdesk/export/volumenes` | Si | Conteos previos a la migracion (JSON) |
+| GET | `/helpdesk/export/tickets.csv` | Si | Tickets, un ticket por fila (CSV) |
+| GET | `/helpdesk/export/historial.jsonl` | Si | Historial del chatter (JSON Lines) |
+| GET | `/helpdesk/export/adjuntos.zip` | Si | Adjuntos + manifiesto (ZIP) |
+| GET | `/helpdesk/export/catalogos.zip` | Si | Catalogos, un CSV por catalogo (ZIP) |
+| GET | `/helpdesk/export/catalogos` | Si | Catalogos en JSON |
 | GET | `/docs` | No | Documentacion interactiva (Swagger) |
 
 ## Codigos de respuesta
@@ -151,18 +171,17 @@ corren en **modo eager** (sincrono inline, sin worker) — util en desarrollo.
 |--------|-------------|
 | 200 | Operacion exitosa |
 | 401 | API Key invalida o ausente |
-| 422 | Modelo/metodo no permitido, error de Odoo, mapeo, conciliacion o descuadre |
+| 422 | Modelo/metodo no permitido, error de Odoo o fallo de exportacion |
 | 429 | Rate limit superado |
 | 503 | Odoo no disponible |
 
 ## Docker
 
 ```bash
-# Solo la API
-docker build -t api-odoo .
-docker run --env-file .env -p 8000:8000 api-odoo
+docker build -t api-odoo-helpdesk .
+docker run --env-file .env -p 8000:8000 api-odoo-helpdesk
 
-# Stack completo con cola: API + worker Celery + Redis
+# Equivalente con compose
 docker compose up --build
 ```
 
@@ -178,3 +197,6 @@ pytest tests/ -v
 - [docs/ejemplos-agentes.md](docs/ejemplos-agentes.md) - Ejemplos rapidos en Python, Node.js y curl
 - [docs/power-query-template.md](docs/power-query-template.md) - Plantilla M para Excel/Power Query
 - [docs/etl-sync.md](docs/etl-sync.md) - Sincronizacion ETL a PostgreSQL/MySQL
+
+La especificacion de la migracion de tickets (campos, formatos y plan de trabajo
+acordado con el equipo de SESTIA) esta en `migracion-tickets-odoo-helpdesk.pdf`.

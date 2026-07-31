@@ -29,9 +29,9 @@ todas las funciones aceptan `desde`/`hasta` sobre write_date del ticket, de modo
 que una segunda pasada solo trae lo creado o modificado tras la fecha de corte.
 El odoo_ref evita duplicados en el destino.
 
-Como inventario.py, este modulo tiene un esquema fijo y NO usa mappings.yaml.
-No toca el state store: la exportacion es de solo lectura e idempotente por
-naturaleza (el odoo_ref del destino evita duplicados al re-importar).
+Este modulo tiene un esquema fijo y no necesita mapeo declarativo. Tampoco
+guarda estado: la exportacion es de solo lectura e idempotente por naturaleza
+(el odoo_ref del destino evita duplicados al re-importar).
 """
 
 import base64

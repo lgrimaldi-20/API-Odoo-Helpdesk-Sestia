@@ -1,8 +1,8 @@
 """
-Routers de negocio del middleware API-Odoo.
+Routers del middleware API-Odoo (exportacion de Helpdesk).
 
-  - facturas: POST /facturas  -> crea + postea account.move (idempotente)
-  - pagos:    POST /pagos     -> crea + postea account.payment (idempotente)
+  - helpdesk: GET /helpdesk/export/*  -> archivos de migracion Odoo -> SESTIA
+              (solo lectura: no escribe nada en Odoo)
 
 Se montan en api.py con app.include_router(...).
 """

@@ -1,7 +1,16 @@
 """
-Middleware API-Odoo
-Expone un endpoint universal para conectar agentes externos, Excel y scripts
-con un servidor Odoo via JSON-RPC.
+Middleware API-Odoo (exportacion de Helpdesk)
+
+Expone dos cosas, ambas de SOLO LECTURA sobre Odoo:
+
+  - /odoo: proxy JSON-RPC generico, para inspeccionar la instancia del cliente
+    durante la migracion (que campos existen, conteos, validar catalogos).
+  - /helpdesk/export/*: los archivos de migracion de tickets Odoo -> SESTIA.
+
+Este middleware NO escribe en Odoo. La capa contable (facturas, pagos,
+conciliacion, inventario) se retiro: no forma parte de la especificacion de
+migracion y anadia superficie de escritura sobre el Odoo de produccion del
+cliente. Sigue disponible en el middleware original (repo API-Odoo).
 """
 
 import logging
@@ -10,7 +19,7 @@ import time
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -24,7 +33,6 @@ from odoo_universal import (
     register_tenant,
     get_tenant,
 )
-from core.state_store import buscar_mapeo, init_db
 
 # ---------------------------------------------------------------------------
 # Configuracion inicial
@@ -52,25 +60,20 @@ limiter = Limiter(key_func=get_remote_address)
 api_key_header = APIKeyHeader(name="X-Api-Key", auto_error=False)
 
 app = FastAPI(
-    title="API-Odoo Middleware",
-    description="Middleware universal para conectar Odoo con agentes externos.",
-    version="1.0.0",
+    title="API-Odoo | Exportacion Helpdesk",
+    description=(
+        "Exportacion de solo lectura de tickets de Odoo Helpdesk hacia el "
+        "modulo Helpdesk de SESTIA, mas un proxy JSON-RPC para inspeccionar "
+        "la instancia durante la migracion."
+    ),
+    version="2.0.0",
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Base de datos de control (state store). Crea las tablas si no existen.
-init_db()
-logger.info("Base de datos de control inicializada.")
-
-# Routers de negocio (facturas, pagos). Endpoints con estado e idempotencia.
 # helpdesk: exportacion de solo lectura para la migracion Odoo -> SESTIA.
-from routers import conciliacion, facturas, helpdesk, inventario, pagos  # noqa: E402  (import tras crear la app)
+from routers import helpdesk  # noqa: E402  (import tras crear la app)
 
-app.include_router(facturas.router)
-app.include_router(pagos.router)
-app.include_router(conciliacion.router)
-app.include_router(inventario.router)
 app.include_router(helpdesk.router)
 
 # ---------------------------------------------------------------------------
@@ -167,35 +170,6 @@ def health_check():
         "odoo_conectado": odoo_ok,
         "modelos_permitidos": sorted(ALLOWED_MODELS) if ALLOWED_MODELS else "todos",
         "metodos_permitidos": sorted(ALLOWED_METHODS) if ALLOWED_METHODS else "todos",
-    }
-
-
-@app.get(
-    "/estado/{entidad}/{id_origen}",
-    tags=["Sistema"],
-    dependencies=[Depends(verify_api_key)],
-)
-def estado_sincronizacion(entidad: str, id_origen: str):
-    """
-    Consulta el estado de sincronizacion de un registro de origen en la base de
-    datos de control (state store). Util para seguimiento e idempotencia.
-
-    Devuelve 404 si el registro nunca se ha intentado sincronizar.
-    """
-    mapa = buscar_mapeo(entidad, id_origen)
-    if mapa is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sin registro de sincronizacion para {entidad}/{id_origen}.",
-        )
-    return {
-        "entidad": mapa.entidad,
-        "id_origen": mapa.id_origen,
-        "model_odoo": mapa.model_odoo,
-        "id_odoo": mapa.id_odoo,
-        "estado": mapa.estado,
-        "error": mapa.error,
-        "actualizado": mapa.actualizado.isoformat() if mapa.actualizado else None,
     }
 
 
