@@ -280,6 +280,46 @@ def _id_de_m2o(valor):
 
 
 # ---------------------------------------------------------------------------
+# odoo_ref: la referencia que enlaza los tres archivos entre si
+# ---------------------------------------------------------------------------
+
+# Campo del ticket que se usa como odoo_ref. Se resuelve UNA vez por exportacion
+# y se reutiliza en los tres archivos: si tickets.csv dijera 'HT-0001' y el
+# manifiesto de adjuntos dijera '1', la importacion no podria enlazarlos y todos
+# los adjuntos quedarian huerfanos.
+CAMPO_REF_PREFERIDO = "ticket_ref"
+
+
+def _campo_ref(odoo: OdooUniversalAPI, modelo: str) -> str | None:
+    """
+    Devuelve el nombre del campo a usar como odoo_ref, o None para usar el id.
+    La seccion 3 acepta "ID o numero del ticket en Odoo": preferimos el numero
+    visible por trazabilidad, y caemos al id si la instalacion no lo tiene.
+    """
+    campos = odoo.execute(modelo, "fields_get", [], attributes=["type"])
+    return CAMPO_REF_PREFERIDO if CAMPO_REF_PREFERIDO in campos else None
+
+
+def _mapa_refs(
+    odoo: OdooUniversalAPI, modelo: str, ids_tickets: list[int]
+) -> dict[int, object]:
+    """
+    Devuelve {ticket_id: odoo_ref} para los tickets dados. Es la unica fuente de
+    la referencia; historial y adjuntos la usan para no divergir de tickets.csv.
+    """
+    if not ids_tickets:
+        return {}
+    campo = _campo_ref(odoo, modelo)
+    if campo is None:
+        return {i: i for i in ids_tickets}
+    try:
+        regs = odoo.execute(modelo, "read", ids_tickets, fields=["id", campo])
+    except OdooExecutionError as e:
+        raise HelpdeskExportError(f"No se pudieron leer las referencias: {e}") from e
+    return {r["id"]: (r.get(campo) or r["id"]) for r in regs}
+
+
+# ---------------------------------------------------------------------------
 # Deteccion del modelo de Helpdesk disponible
 # ---------------------------------------------------------------------------
 
@@ -391,6 +431,7 @@ def _leer_tickets(
     etapas_cierre: list[str] | None,
     desde: str | None = None,
     hasta: str | None = None,
+    recortar_citas: bool = True,
 ) -> tuple[list[dict], list[str]]:
     """
     Lee los tickets de Odoo y los traduce al esquema de tickets.csv.
@@ -409,8 +450,9 @@ def _leer_tickets(
         "id", "name", "description", "team_id", "stage_id", "priority",
         "tag_ids", "user_id", "create_uid", "create_date", "close_date",
     ]
-    for opcional in ("ticket_ref", "partner_name", "partner_email", "partner_phone",
-                     "partner_id", "sla_deadline", "category_id", "subcategory_id"):
+    for opcional in (CAMPO_REF_PREFERIDO, "partner_name", "partner_email",
+                     "partner_phone", "partner_id", "sla_deadline",
+                     "category_id", "subcategory_id"):
         if tiene(opcional):
             campos.append(opcional)
 
@@ -438,15 +480,22 @@ def _leer_tickets(
 
     filas = []
     sin_fecha_cierre = []
+    tags_sin_nombre: set[int] = set()
     for r in registros:
         stage_id = _id_de_m2o(r.get("stage_id"))
         estado = "closed" if mapa_cierre.get(stage_id) else "open"
-        etiquetas = ";".join(
-            nombres_tags.get(tid, "") for tid in (r.get("tag_ids") or [])
-            if nombres_tags.get(tid)
-        )
-        # odoo_ref: preferimos el numero visible (ticket_ref) y si no el id.
-        odoo_ref = r.get("ticket_ref") or r["id"]
+        # Una etiqueta cuyo nombre no se resuelve (borrada o sin permiso de
+        # lectura) se perderia en silencio; se anota para avisar al final.
+        etiquetas_ticket = []
+        for tid in (r.get("tag_ids") or []):
+            nombre_tag = nombres_tags.get(tid)
+            if nombre_tag:
+                etiquetas_ticket.append(nombre_tag)
+            else:
+                tags_sin_nombre.add(tid)
+        etiquetas = ";".join(etiquetas_ticket)
+        # odoo_ref: misma regla que historial y adjuntos (ver _mapa_refs).
+        odoo_ref = r.get(CAMPO_REF_PREFERIDO) or r["id"]
         # Contacto: campos partner_* directos o el partner_id relacionado.
         contacto_nombre = r.get("partner_name") or _nombre_de_m2o(r.get("partner_id"))
 
@@ -460,7 +509,11 @@ def _leer_tickets(
         fila = {
             "odoo_ref": odoo_ref,
             "titulo": r.get("name") or "",
-            "descripcion": html_a_texto(r.get("description") or ""),
+            # La descripcion suele ser el correo que abrio el ticket: mismo
+            # tratamiento que el cuerpo de los mensajes (seccion 5.3).
+            "descripcion": html_a_texto(
+                r.get("description") or "", recortar_citas=recortar_citas
+            ),
             "equipo": _nombre_de_m2o(r.get("team_id")),
             "etapa": _nombre_de_m2o(r.get("stage_id")),
             "prioridad": r.get("priority") or "0",
@@ -487,6 +540,12 @@ def _leer_tickets(
             len(sin_fecha_cierre),
             ", ".join(str(x) for x in sin_fecha_cierre[:20]),
         )
+    if tags_sin_nombre:
+        logger.warning(
+            "HELPDESK_EXPORT | %d etiqueta(s) referenciadas por tickets sin nombre "
+            "resoluble (borradas o sin permiso de lectura): %s",
+            len(tags_sin_nombre), sorted(tags_sin_nombre)[:20],
+        )
     return filas, personalizados
 
 
@@ -508,6 +567,7 @@ def exportar_tickets_csv(
     etapas_cierre: list[str] | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    recortar_citas: bool = True,
 ) -> str:
     """
     Genera el contenido de tickets.csv (UTF-8, RFC 4180) como cadena.
@@ -515,8 +575,11 @@ def exportar_tickets_csv(
     limite: numero maximo de tickets (None = todos). Util para la muestra.
     etapas_cierre: nombres de etapas consideradas de cierre (override de `fold`).
     desde/hasta: ventana sobre write_date para la re-exportacion incremental.
+    recortar_citas: recorta el hilo citado y las firmas de la descripcion (5.3).
     """
-    filas, personalizados = _leer_tickets(odoo, limite, etapas_cierre, desde, hasta)
+    filas, personalizados = _leer_tickets(
+        odoo, limite, etapas_cierre, desde, hasta, recortar_citas
+    )
     buffer = io.StringIO()
     # Los campos personalizados van al final de la cabecera (seccion 3).
     columnas = COLUMNAS_TICKETS + personalizados
@@ -647,12 +710,20 @@ def exportar_historial_jsonl(
     modelo = _detectar_modelo_ticket(odoo)
 
     # Subtipos que son "nota interna" (internal=True) para clasificar.
+    # Sin los subtipos no se puede distinguir una nota interna de un comentario
+    # publico (seccion 5.1: "sin ese dato no podemos clasificarlos"). Fallar es
+    # obligatorio: degradar en silencio exportaria las notas internas del agente
+    # como mensajes visibles para el cliente.
     try:
         subtipos_internos = odoo.execute(
             "mail.message.subtype", "search", [[["internal", "=", True]]]
         )
-    except OdooExecutionError:
-        subtipos_internos = []
+    except OdooExecutionError as e:
+        raise HelpdeskExportError(
+            "No se pudieron leer los subtipos de mensaje (mail.message.subtype), "
+            "necesarios para distinguir notas internas de comentarios publicos. "
+            f"Exportar sin ese dato haria publicas las notas internas: {e}"
+        ) from e
     subtipos_cierre = set(subtipos_internos)
 
     try:
@@ -668,13 +739,8 @@ def exportar_historial_jsonl(
     except OdooExecutionError as e:
         raise HelpdeskExportError(f"No se pudo leer el historial: {e}") from e
 
-    # odoo_ref por ticket: reutilizamos ticket_ref si existe, si no el id.
-    campos_ticket = odoo.execute(modelo, "fields_get", [], attributes=["type"])
-    campo_ref = "ticket_ref" if "ticket_ref" in campos_ticket else None
-    refs = {}
-    if campo_ref:
-        for t in odoo.execute(modelo, "read", ids_tickets, fields=["id", campo_ref]):
-            refs[t["id"]] = t.get(campo_ref) or t["id"]
+    # MISMA referencia que tickets.csv (seccion 5.2: "misma que en tickets.csv").
+    refs = _mapa_refs(odoo, modelo, ids_tickets)
 
     # Usuarios internos (para el rol del autor) y emails de autores.
     ids_autores = {_id_de_m2o(m.get("author_id")) for m in mensajes}
@@ -832,6 +898,10 @@ def exportar_adjuntos_zip(
             odoo, mensajes, adjunto_a_mensaje, {a["id"] for a in adjuntos}
         )
 
+    # MISMA referencia que tickets.csv e historial.jsonl: si aqui se usara el id
+    # crudo (res_id) y alli el numero visible, los adjuntos quedarian huerfanos.
+    refs = _mapa_refs(odoo, modelo, ids_tickets)
+
     emails_subida = _cache_email_usuarios(
         odoo, {_id_de_m2o(a.get("create_uid")) for a in adjuntos}
     )
@@ -849,9 +919,11 @@ def exportar_adjuntos_zip(
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         usados: set[str] = set()
         for a in adjuntos:
-            odoo_ref = a["res_id"]
+            odoo_ref = refs.get(a["res_id"], a["res_id"])
             nombre = a.get("name") or f"adjunto_{a['id']}"
-            ruta = _ruta_unica(f"{odoo_ref}/{nombre}", usados)
+            # La carpeta del ZIP lleva el odoo_ref (seccion 6), saneado: un
+            # numero de ticket puede traer '/' y romperia la ruta del ZIP.
+            ruta = _ruta_unica(f"{_seguro_para_ruta(odoo_ref)}/{nombre}", usados)
 
             # datos_b64 ya viene resuelto para las imagenes inline (data: URI);
             # el resto se lee de Odoo por lotes justo antes de escribirlo.
@@ -990,6 +1062,19 @@ def _adjuntos_embebidos(
     return extra
 
 
+def _seguro_para_ruta(valor) -> str:
+    """
+    Sanea un valor para usarlo como nombre de carpeta dentro del ZIP.
+
+    Un numero de ticket puede contener barras o dos puntos ('SOP/2024/001'), que
+    crearian subcarpetas no deseadas o rutas invalidas al descomprimir.
+    """
+    texto = str(valor).strip()
+    texto = re.sub(r"[\\/:*?\"<>|]+", "_", texto)     # separadores y prohibidos
+    texto = texto.strip(". ")                          # evita '..' y espacios
+    return texto or "sin_ref"
+
+
 def _ruta_unica(ruta: str, usados: set[str]) -> str:
     """Evita colisiones de nombre dentro del ZIP anadiendo un sufijo numerico."""
     if ruta not in usados:
@@ -1021,17 +1106,23 @@ def _zip_vacio() -> bytes:
 # 4. Catalogos (seccion 4)
 # ---------------------------------------------------------------------------
 
-def exportar_catalogos(odoo: OdooUniversalAPI) -> dict:
+def exportar_catalogos(
+    odoo: OdooUniversalAPI, etapas_cierre: list[str] | None = None
+) -> dict:
     """
     Devuelve los catalogos previos requeridos antes de importar (seccion 4):
-    equipos, etapas por equipo, categorias, etiquetas y usuarios activos.
+    equipos, etapas por equipo, categorias, etiquetas y usuarios.
+
+    etapas_cierre: mismo override que en tickets.csv, para que el `es_cierre` del
+    catalogo coincida con el estado open/closed exportado.
 
     Formato: dict de listas, listo para serializar a JSON o a CSVs por catalogo.
     """
     catalogos = {
         "equipos": _catalogo_equipos(odoo),
-        "etapas": _catalogo_etapas(odoo),
+        "etapas": _catalogo_etapas(odoo, etapas_cierre),
         "categorias": _catalogo_categorias(odoo),
+        "subcategorias": _catalogo_subcategorias(odoo),
         "etiquetas": _catalogo_etiquetas(odoo),
         "usuarios": _catalogo_usuarios(odoo),
     }
@@ -1059,11 +1150,18 @@ def _catalogo_equipos(odoo: OdooUniversalAPI) -> list[dict]:
     ]
 
 
-def _catalogo_etapas(odoo: OdooUniversalAPI) -> list[dict]:
+def _catalogo_etapas(
+    odoo: OdooUniversalAPI, etapas_cierre: list[str] | None = None
+) -> list[dict]:
     """
     Etapas de cada equipo con su orden, y si son inicial/cierre. helpdesk.stage
     tiene team_ids (m2m) y sequence; la etapa inicial es la de menor sequence.
+
+    `es_cierre` se calcula con el MISMO criterio que el estado open/closed de
+    tickets.csv (ver _mapa_etapas_cierre): si no, el catalogo y los tickets
+    dirian cosas distintas sobre la misma etapa.
     """
+    mapa_cierre = _mapa_etapas_cierre(odoo, etapas_cierre)
     try:
         etapas = odoo.execute(
             "helpdesk.stage", "search_read", [[]],
@@ -1093,7 +1191,7 @@ def _catalogo_etapas(odoo: OdooUniversalAPI) -> list[dict]:
                 "etapa": e.get("name") or "",
                 "orden": e.get("sequence") or 0,
                 "es_inicial": bool(tid and e.get("sequence", 0) == min_seq_por_equipo.get(tid)),
-                "es_cierre": bool(e.get("fold")),
+                "es_cierre": bool(mapa_cierre.get(e["id"])),
             })
     return filas
 
@@ -1117,6 +1215,30 @@ def _catalogo_categorias(odoo: OdooUniversalAPI) -> list[dict]:
     return [{"nombre": t.get("name") or ""} for t in tipos]
 
 
+def _catalogo_subcategorias(odoo: OdooUniversalAPI) -> list[dict]:
+    """
+    Subcategorias, si la instalacion las maneja. Son un catalogo APARTE del de
+    categorias (seccion 3: id_category / id_subcategory son campos distintos).
+    Se leen de los valores que realmente usan los tickets, porque el modelo
+    concreto depende de la personalizacion de cada cliente.
+    """
+    modelo = _detectar_modelo_ticket(odoo)
+    campos = odoo.execute(modelo, "fields_get", [], attributes=["type"])
+    if "subcategory_id" not in campos:
+        return []
+    try:
+        tickets = odoo.execute(
+            modelo, "search_read", [[]], fields=["subcategory_id"]
+        )
+    except OdooExecutionError:
+        return []
+    nombres = {
+        _nombre_de_m2o(t.get("subcategory_id"))
+        for t in tickets if t.get("subcategory_id")
+    }
+    return [{"nombre": n} for n in sorted(n for n in nombres if n)]
+
+
 def _catalogo_etiquetas(odoo: OdooUniversalAPI) -> list[dict]:
     try:
         tags = odoo.execute(
@@ -1129,25 +1251,155 @@ def _catalogo_etiquetas(odoo: OdooUniversalAPI) -> list[dict]:
 
 def _catalogo_usuarios(odoo: OdooUniversalAPI) -> list[dict]:
     """
-    Usuarios activos internos (nombre + email). El email debe coincidir con el
-    del usuario en la plataforma SESTIA (seccion 4).
+    Usuarios que aparecen como asignados o autores, mas los internos activos
+    (nombre + email). El email debe coincidir con el del usuario en SESTIA (4).
+
+    Incluye a los ARCHIVADOS que aparezcan en algun ticket: un agente que dejo
+    la empresa sigue figurando como asignado en los tickets historicos, y si no
+    esta en el catalogo la importacion no puede resolverlo. El criterio de la
+    seccion 4 es "los que aparecen como asignados o autores", no "los activos".
     """
+    referenciados = _ids_usuarios_referenciados(odoo)
+    dominio = [
+        "|", ["id", "in", sorted(referenciados)],
+        "&", ["active", "=", True], ["share", "=", False],
+    ]
     try:
         usuarios = odoo.execute(
-            "res.users", "search_read",
-            [[["active", "=", True], ["share", "=", False]]],
-            fields=["name", "login", "email"], order="name",
+            "res.users", "search_read", [dominio],
+            fields=["name", "login", "email", "active"], order="name",
+            context={"active_test": False},  # sin esto Odoo oculta los archivados
         )
     except OdooExecutionError as e:
         raise HelpdeskExportError(f"No se pudieron leer los usuarios: {e}") from e
     return [
-        {"nombre": u.get("name") or "", "email": u.get("email") or u.get("login") or ""}
+        {
+            "nombre": u.get("name") or "",
+            "email": u.get("email") or u.get("login") or "",
+            # Marca los que ya no estan activos: el equipo de SESTIA decide si
+            # crearles usuario o reasignar sus tickets.
+            "activo": bool(u.get("active", True)),
+        }
         for u in usuarios
     ]
 
 
+def _ids_usuarios_referenciados(odoo: OdooUniversalAPI) -> set[int]:
+    """
+    Ids de res.users que aparecen como asignado o creador de algun ticket.
+    Se leen de los propios tickets para no depender de que sigan activos.
+    """
+    modelo = _detectar_modelo_ticket(odoo)
+    try:
+        tickets = odoo.execute(
+            modelo, "search_read", [[]], fields=["user_id", "create_uid"]
+        )
+    except OdooExecutionError:
+        return set()
+    ids = set()
+    for t in tickets:
+        ids.add(_id_de_m2o(t.get("user_id")))
+        ids.add(_id_de_m2o(t.get("create_uid")))
+    return {i for i in ids if i}
+
+
 # ---------------------------------------------------------------------------
-# 5. Volumenes (pasos 2 y 7 del plan; checklist de la seccion 7)
+# 5. Validacion previa (seccion 4: los catalogos deben existir antes de importar)
+# ---------------------------------------------------------------------------
+
+def validar_contra_catalogos(
+    odoo: OdooUniversalAPI,
+    limite: int | None = None,
+    etapas_cierre: list[str] | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> dict:
+    """
+    Comprueba que todo valor que aparece en los tickets existe en los catalogos
+    (seccion 4: "todo valor que aparezca en tickets.csv debe existir antes en el
+    modulo"). Detecta los fallos ANTES de importar, en vez de fila por fila.
+
+    Verifica equipo, etapa, categoria, subcategoria y etiquetas por NOMBRE, y los
+    emails de asignados y creadores contra el catalogo de usuarios.
+
+    Devuelve {"ok": bool, "problemas": {...}, "resumen": {...}}. Las etiquetas
+    pesan especialmente: su catalogo es CERRADO (no se crean al vuelo).
+    """
+    filas, _ = _leer_tickets(odoo, limite, etapas_cierre, desde, hasta)
+    catalogos = exportar_catalogos(odoo, etapas_cierre)
+
+    def _conjunto(clave, campo="nombre"):
+        return {(c.get(campo) or "").strip() for c in catalogos[clave]}
+
+    equipos = _conjunto("equipos")
+    etapas = {(e.get("etapa") or "").strip() for e in catalogos["etapas"]}
+    categorias = _conjunto("categorias")
+    # Catalogo APARTE del de categorias (seccion 3: son campos distintos).
+    subcategorias = _conjunto("subcategorias")
+    etiquetas = _conjunto("etiquetas")
+    emails = {(u.get("email") or "").strip().lower() for u in catalogos["usuarios"]}
+
+    problemas: dict[str, dict] = {
+        "equipos": {}, "etapas": {}, "categorias": {}, "subcategorias": {},
+        "etiquetas": {}, "emails": {}, "sin_fecha_cierre": [],
+    }
+
+    def _anota(clave, valor, ref):
+        if not valor:
+            return
+        problemas[clave].setdefault(valor, []).append(ref)
+
+    for f in filas:
+        ref = f["odoo_ref"]
+        if f["equipo"] not in equipos:
+            _anota("equipos", f["equipo"], ref)
+        if f["etapa"] not in etapas:
+            _anota("etapas", f["etapa"], ref)
+        if f["categoria"] and f["categoria"] not in categorias:
+            _anota("categorias", f["categoria"], ref)
+        if f["subcategoria"] and f["subcategoria"] not in subcategorias:
+            _anota("subcategorias", f["subcategoria"], ref)
+        for tag in (f["etiquetas"] or "").split(";"):
+            if tag.strip() and tag.strip() not in etiquetas:
+                _anota("etiquetas", tag.strip(), ref)
+        for campo in ("asignado_email", "creado_por_email"):
+            valor = (f.get(campo) or "").strip().lower()
+            if valor and valor not in emails:
+                _anota("emails", valor, ref)
+        # La seccion 3 exige fecha_cierre en los tickets cerrados.
+        if f["estado"] == "closed" and not f["fecha_cierre"]:
+            problemas["sin_fecha_cierre"].append(ref)
+
+    # Se recorta la lista de tickets afectados: basta una muestra para actuar.
+    for clave, valores in problemas.items():
+        if isinstance(valores, dict):
+            for valor, refs in valores.items():
+                if len(refs) > 10:
+                    valores[valor] = refs[:10] + [f"... y {len(refs) - 10} mas"]
+
+    total = sum(
+        len(v) if isinstance(v, (dict, list)) else 0 for v in problemas.values()
+    )
+    resultado = {
+        "ok": total == 0,
+        "tickets_revisados": len(filas),
+        "problemas": {k: v for k, v in problemas.items() if v},
+        "resumen": {
+            "valores_sin_catalogo": sum(
+                len(v) for v in problemas.values() if isinstance(v, dict)
+            ),
+            "tickets_cerrados_sin_fecha": len(problemas["sin_fecha_cierre"]),
+        },
+    }
+    logger.info(
+        "HELPDESK_EXPORT | validacion: ok=%s tickets=%d valores_sin_catalogo=%d",
+        resultado["ok"], len(filas), resultado["resumen"]["valores_sin_catalogo"],
+    )
+    return resultado
+
+
+# ---------------------------------------------------------------------------
+# 6. Volumenes (pasos 2 y 7 del plan; checklist de la seccion 7)
 # ---------------------------------------------------------------------------
 
 def contar_volumenes(

@@ -48,6 +48,7 @@ from core.helpdesk_export import (
     exportar_catalogos,
     exportar_historial_jsonl,
     exportar_tickets_csv,
+    validar_contra_catalogos,
 )
 from core.seguridad import resolver_tenant, verify_api_key
 from odoo_universal import OdooConnectionError, OdooUniversalAPI
@@ -95,6 +96,37 @@ def consultar_volumenes(
     return _manejar_errores(lambda: contar_volumenes(odoo, desde=desde, hasta=hasta))
 
 
+@router.get("/validar")
+def validar_catalogos(
+    tenant: str = "default",
+    limite: int | None = Query(None, ge=1, description="Maximo de tickets a revisar."),
+    etapas_cierre: str | None = Query(
+        None, description="Etapas de cierre separadas por coma."
+    ),
+    desde: str | None = Query(None, description="Fecha de corte inferior (ISO 8601)."),
+    hasta: str | None = Query(None, description="Fecha de corte superior (ISO 8601)."),
+):
+    """
+    Comprueba que los valores de los tickets existen en los catalogos antes de
+    importar (seccion 4). Devuelve los equipos, etapas, categorias, etiquetas y
+    emails que faltarian, con ejemplos de tickets afectados.
+
+    Ejecutar tras precargar los catalogos en SESTIA y antes de la importacion:
+    evita descubrir los fallos fila por fila durante la carga.
+    """
+    odoo: OdooUniversalAPI = resolver_tenant(tenant)
+    cierre = (
+        [n.strip() for n in etapas_cierre.split(",") if n.strip()]
+        if etapas_cierre is not None
+        else _etapas_cierre_por_defecto()
+    )
+    return _manejar_errores(
+        lambda: validar_contra_catalogos(
+            odoo, limite=limite, etapas_cierre=cierre, desde=desde, hasta=hasta
+        )
+    )
+
+
 @router.get("/tickets.csv")
 def exportar_tickets(
     tenant: str = "default",
@@ -104,6 +136,9 @@ def exportar_tickets(
     ),
     desde: str | None = Query(None, description="Fecha de corte inferior (ISO 8601)."),
     hasta: str | None = Query(None, description="Fecha de corte superior (ISO 8601)."),
+    recortar_citas: bool = Query(
+        True, description="Recorta el hilo citado y las firmas de la descripcion (5.3)."
+    ),
 ):
     """Genera tickets.csv (UTF-8, RFC 4180). Un ticket por fila."""
     odoo: OdooUniversalAPI = resolver_tenant(tenant)
@@ -114,7 +149,8 @@ def exportar_tickets(
     )
     contenido = _manejar_errores(
         lambda: exportar_tickets_csv(
-            odoo, limite=limite, etapas_cierre=cierre, desde=desde, hasta=hasta
+            odoo, limite=limite, etapas_cierre=cierre, desde=desde, hasta=hasta,
+            recortar_citas=recortar_citas,
         )
     )
     return Response(
@@ -195,10 +231,22 @@ def exportar_adjuntos(
 
 
 @router.get("/catalogos.zip")
-def exportar_catalogos_zip(tenant: str = "default"):
+def exportar_catalogos_zip(
+    tenant: str = "default",
+    etapas_cierre: str | None = Query(
+        None, description="Etapas de cierre separadas por coma (para el flag es_cierre)."
+    ),
+):
     """Genera un ZIP con un CSV por catalogo (equipos, etapas, categorias...)."""
     odoo: OdooUniversalAPI = resolver_tenant(tenant)
-    contenido = _manejar_errores(lambda: catalogos_a_zip(exportar_catalogos(odoo)))
+    cierre = (
+        [n.strip() for n in etapas_cierre.split(",") if n.strip()]
+        if etapas_cierre is not None
+        else _etapas_cierre_por_defecto()
+    )
+    contenido = _manejar_errores(
+        lambda: catalogos_a_zip(exportar_catalogos(odoo, cierre))
+    )
     return Response(
         content=contenido,
         media_type="application/zip",
@@ -207,7 +255,17 @@ def exportar_catalogos_zip(tenant: str = "default"):
 
 
 @router.get("/catalogos")
-def consultar_catalogos(tenant: str = "default"):
+def consultar_catalogos(
+    tenant: str = "default",
+    etapas_cierre: str | None = Query(
+        None, description="Etapas de cierre separadas por coma (para el flag es_cierre)."
+    ),
+):
     """Devuelve los catalogos como JSON (inspeccion rapida antes de importar)."""
     odoo: OdooUniversalAPI = resolver_tenant(tenant)
-    return _manejar_errores(lambda: exportar_catalogos(odoo))
+    cierre = (
+        [n.strip() for n in etapas_cierre.split(",") if n.strip()]
+        if etapas_cierre is not None
+        else _etapas_cierre_por_defecto()
+    )
+    return _manejar_errores(lambda: exportar_catalogos(odoo, cierre))

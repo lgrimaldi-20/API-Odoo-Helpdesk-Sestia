@@ -383,8 +383,9 @@ class TestAdjuntosZip:
         zf = zipfile.ZipFile(io.BytesIO(contenido))
         nombres = zf.namelist()
         assert "manifiesto_adjuntos.csv" in nombres
-        assert "1/foto.png" in nombres
-        assert zf.read("1/foto.png") == b"PNGDATA"
+        # La carpeta lleva el odoo_ref, el mismo que usa tickets.csv.
+        assert "HT-0001/foto.png" in nombres
+        assert zf.read("HT-0001/foto.png") == b"PNGDATA"
 
     def test_manifiesto_liga_adjunto_a_mensaje(self, odoo_helpdesk):
         zf = zipfile.ZipFile(io.BytesIO(exportar_adjuntos_zip(odoo_helpdesk)))
@@ -393,7 +394,7 @@ class TestAdjuntosZip:
         assert fila["odoo_attachment_id"] == "7000"
         assert fila["odoo_message_id"] == "9001"  # adjunto ligado al mensaje
         assert fila["mimetype"] == "image/png"
-        assert fila["ruta_en_zip"] == "1/foto.png"
+        assert fila["ruta_en_zip"] == "HT-0001/foto.png"
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +507,24 @@ class TestCuerpoDeMensaje:
         assert correo["autor_email"] == "cliente@x.com"
         assert correo["autor_tipo"] == "cliente"
 
+    def test_descripcion_tambien_recorta_citas(self, odoo_helpdesk):
+        # La descripcion suele ser el correo que abrio el ticket, con hilo citado.
+        odoo_helpdesk.datos["helpdesk.ticket"][0]["description"] = (
+            "<p>Problema original</p>"
+            "<blockquote>correo anterior citado</blockquote>"
+        )
+        filas = {f["odoo_ref"]: f for f in csv.DictReader(
+            io.StringIO(exportar_tickets_csv(odoo_helpdesk)))}
+        assert filas["HT-0001"]["descripcion"] == "Problema original"
+
+    def test_descripcion_sin_recorte_si_se_pide(self, odoo_helpdesk):
+        odoo_helpdesk.datos["helpdesk.ticket"][0]["description"] = (
+            "<p>Problema original</p><blockquote>correo anterior</blockquote>"
+        )
+        filas = {f["odoo_ref"]: f for f in csv.DictReader(io.StringIO(
+            exportar_tickets_csv(odoo_helpdesk, recortar_citas=False)))}
+        assert "correo anterior" in filas["HT-0001"]["descripcion"]
+
     def test_solo_abiertos_acota_el_historial(self, odoo_helpdesk):
         # HT-0002 esta en etapa "Resuelto" (fold=True) -> se excluye.
         contenido = exportar_historial_jsonl(odoo_helpdesk, solo_abiertos=True)
@@ -556,8 +575,176 @@ class TestAdjuntosEmbebidos:
 
         monkeypatch.setattr(odoo_helpdesk, "execute", espiar)
         zf = zipfile.ZipFile(io.BytesIO(exportar_adjuntos_zip(odoo_helpdesk)))
-        assert zf.read("1/foto.png") == b"PNGDATA"
+        assert zf.read("HT-0001/foto.png") == b"PNGDATA"
         assert all(len(l) == 1 for l in lecturas)
+
+
+# ---------------------------------------------------------------------------
+# Integridad referencial: odoo_ref enlaza los tres archivos entre si
+# ---------------------------------------------------------------------------
+
+class TestOdooRefConsistente:
+    """
+    El odoo_ref es lo unico que enlaza tickets.csv, historial.jsonl y el
+    manifiesto de adjuntos. Si un archivo usara el id numerico y otro el numero
+    visible, la importacion no podria relacionarlos.
+    """
+
+    def _refs(self, odoo):
+        tickets = {f["odoo_ref"] for f in csv.DictReader(
+            io.StringIO(exportar_tickets_csv(odoo)))}
+        hist = {str(json.loads(l)["odoo_ref"])
+                for l in exportar_historial_jsonl(odoo).splitlines()}
+        zf = zipfile.ZipFile(io.BytesIO(exportar_adjuntos_zip(odoo)))
+        man = {f["odoo_ref"] for f in csv.DictReader(
+            io.StringIO(zf.read("manifiesto_adjuntos.csv").decode()))}
+        return tickets, hist, man
+
+    def test_los_tres_archivos_usan_la_misma_referencia(self, odoo_helpdesk):
+        tickets, hist, man = self._refs(odoo_helpdesk)
+        assert hist <= tickets, f"historial huerfano: {hist - tickets}"
+        assert man <= tickets, f"adjuntos huerfanos: {man - tickets}"
+
+    def test_usa_el_numero_visible_cuando_existe(self, odoo_helpdesk):
+        tickets, _, man = self._refs(odoo_helpdesk)
+        assert tickets == {"HT-0001", "HT-0002"}
+        assert man <= {"HT-0001", "HT-0002"}
+
+    def test_cae_al_id_si_no_hay_ticket_ref(self, odoo_helpdesk):
+        # Instalacion sin el campo ticket_ref: los tres deben usar el id.
+        odoo_helpdesk.fields["helpdesk.ticket"].pop("ticket_ref")
+        tickets, hist, man = self._refs(odoo_helpdesk)
+        assert tickets == {"1", "2"}
+        assert hist <= tickets
+        assert man <= tickets
+
+    def test_ref_con_barras_no_rompe_la_ruta_del_zip(self, odoo_helpdesk):
+        # Un numero tipo 'SOP/2024/001' creaba subcarpetas dentro del ZIP.
+        odoo_helpdesk.datos["helpdesk.ticket"][0]["ticket_ref"] = "SOP/2024/001"
+        zf = zipfile.ZipFile(io.BytesIO(exportar_adjuntos_zip(odoo_helpdesk)))
+        rutas = [n for n in zf.namelist() if n != "manifiesto_adjuntos.csv"]
+        assert all(r.count("/") == 1 for r in rutas), rutas
+        # El manifiesto conserva la referencia real, sin sanear.
+        man = list(csv.DictReader(io.StringIO(
+            zf.read("manifiesto_adjuntos.csv").decode())))
+        assert any(f["odoo_ref"] == "SOP/2024/001" for f in man)
+
+
+# ---------------------------------------------------------------------------
+# Catalogos: usuarios archivados y coherencia de es_cierre
+# ---------------------------------------------------------------------------
+
+class TestCatalogosCompletos:
+    def test_incluye_usuarios_archivados_referenciados(self, odoo_helpdesk):
+        # Un agente que dejo la empresa sigue asignado en tickets historicos.
+        odoo_helpdesk.datos["res.users"].append({
+            "id": 99, "name": "ExEmpleado", "login": "ex@empresa.com",
+            "email": "ex@empresa.com", "partner_id": [599, "Ex"],
+            "active": False, "share": False,
+        })
+        odoo_helpdesk.datos["helpdesk.ticket"][1]["user_id"] = [99, "ExEmpleado"]
+
+        cat = exportar_catalogos(odoo_helpdesk)
+        emails = {u["email"] for u in cat["usuarios"]}
+        assert "ex@empresa.com" in emails, "el asignado archivado falta en el catalogo"
+        # Y se marca como inactivo para que SESTIA decida que hacer con el.
+        ex = next(u for u in cat["usuarios"] if u["email"] == "ex@empresa.com")
+        assert ex["activo"] is False
+
+    def test_es_cierre_respeta_el_override(self, odoo_helpdesk):
+        # Con el override, "Nuevo" pasa a ser de cierre y "Resuelto" deja de serlo:
+        # el catalogo debe decir lo mismo que el estado de tickets.csv.
+        cat = exportar_catalogos(odoo_helpdesk, etapas_cierre=["Nuevo"])
+        etapas = {e["etapa"]: e for e in cat["etapas"]}
+        assert etapas["Nuevo"]["es_cierre"] is True
+        assert etapas["Resuelto"]["es_cierre"] is False
+
+    def test_es_cierre_por_defecto_usa_fold(self, odoo_helpdesk):
+        etapas = {e["etapa"]: e for e in exportar_catalogos(odoo_helpdesk)["etapas"]}
+        assert etapas["Resuelto"]["es_cierre"] is True
+        assert etapas["Nuevo"]["es_cierre"] is False
+
+
+# ---------------------------------------------------------------------------
+# Clasificacion de mensajes: no debe degradar en silencio
+# ---------------------------------------------------------------------------
+
+class TestClasificacionSegura:
+    def test_falla_si_no_puede_leer_los_subtipos(self, odoo_helpdesk, monkeypatch):
+        # Sin subtipos no se distingue nota interna de comentario publico:
+        # exportar igualmente haria publicas las notas internas del agente.
+        from odoo_universal import OdooExecutionError
+        original = odoo_helpdesk.execute
+
+        def fallar(model, method, *args, **kwargs):
+            if model == "mail.message.subtype":
+                raise OdooExecutionError("sin permisos")
+            return original(model, method, *args, **kwargs)
+
+        monkeypatch.setattr(odoo_helpdesk, "execute", fallar)
+        with pytest.raises(HelpdeskExportError, match="notas internas"):
+            exportar_historial_jsonl(odoo_helpdesk)
+
+
+# ---------------------------------------------------------------------------
+# Validacion contra catalogos (seccion 4)
+# ---------------------------------------------------------------------------
+
+class TestValidacion:
+    def test_sin_problemas_cuando_todo_esta_en_catalogo(self, odoo_helpdesk):
+        r = hx.validar_contra_catalogos(odoo_helpdesk)
+        assert r["ok"] is True
+        assert r["tickets_revisados"] == 2
+
+    def test_detecta_etiqueta_fuera_de_catalogo(self, odoo_helpdesk, monkeypatch):
+        # El catalogo de etiquetas es CERRADO: no se crean al vuelo. Simulamos
+        # que 'vip' se resuelve en el ticket pero no aparece en el catalogo.
+        real = hx._catalogo_etiquetas
+        monkeypatch.setattr(
+            hx, "_catalogo_etiquetas",
+            lambda odoo: [t for t in real(odoo) if t["nombre"] != "vip"],
+        )
+        r = hx.validar_contra_catalogos(odoo_helpdesk)
+        assert r["ok"] is False
+        assert "vip" in r["problemas"]["etiquetas"]
+        assert "HT-0001" in r["problemas"]["etiquetas"]["vip"]
+
+    def test_avisa_de_etiqueta_sin_nombre_resoluble(self, odoo_helpdesk, caplog):
+        # Etiqueta borrada de helpdesk.tag pero aun referenciada por el ticket:
+        # antes desaparecia del CSV sin dejar rastro.
+        odoo_helpdesk.datos["helpdesk.tag"] = [{"id": 1000, "name": "urgente"}]
+        with caplog.at_level("WARNING", logger="api-odoo"):
+            contenido = exportar_tickets_csv(odoo_helpdesk)
+        assert "sin nombre resoluble" in caplog.text
+        fila = list(csv.DictReader(io.StringIO(contenido)))[0]
+        assert fila["etiquetas"] == "urgente"  # la resoluble si sale
+
+    def test_detecta_equipo_fuera_de_catalogo(self, odoo_helpdesk):
+        # Equipo archivado o borrado: el ticket lo referencia pero no esta en el
+        # catalogo, asi que la importacion no podria resolverlo.
+        odoo_helpdesk.datos["helpdesk.team"] = []
+        r = hx.validar_contra_catalogos(odoo_helpdesk)
+        assert r["ok"] is False
+        assert "Soporte" in r["problemas"]["equipos"]
+
+    def test_el_asignado_siempre_entra_en_el_catalogo(self, odoo_helpdesk):
+        # Contrapartida del anterior: cualquier usuario referenciado por un
+        # ticket entra al catalogo, aunque sea de portal o este archivado, para
+        # que la validacion de emails no lo reporte como ausente.
+        odoo_helpdesk.datos["helpdesk.ticket"][0]["user_id"] = [77, "Externo"]
+        odoo_helpdesk.datos["res.users"].append({
+            "id": 77, "name": "Externo", "login": "externo@x.com",
+            "email": "externo@x.com", "partner_id": [577, "E"],
+            "active": True, "share": True,
+        })
+        r = hx.validar_contra_catalogos(odoo_helpdesk)
+        assert "emails" not in r["problemas"]
+
+    def test_detecta_cerrado_sin_fecha(self, odoo_helpdesk):
+        odoo_helpdesk.datos["helpdesk.ticket"][1]["close_date"] = False
+        r = hx.validar_contra_catalogos(odoo_helpdesk)
+        assert r["ok"] is False
+        assert "HT-0002" in r["problemas"]["sin_fecha_cierre"]
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +775,9 @@ class TestVolumenes:
 class TestCatalogos:
     def test_estructura_completa(self, odoo_helpdesk):
         cat = exportar_catalogos(odoo_helpdesk)
-        assert set(cat.keys()) == {"equipos", "etapas", "categorias", "etiquetas", "usuarios"}
+        assert set(cat.keys()) == {
+            "equipos", "etapas", "categorias", "subcategorias", "etiquetas", "usuarios",
+        }
         assert cat["equipos"][0]["nombre"] == "Soporte"
         assert {t["nombre"] for t in cat["etiquetas"]} == {"urgente", "vip"}
         assert cat["usuarios"][0]["email"] == "ana@empresa.com"
@@ -665,6 +854,12 @@ class TestRouterHelpdesk:
         r = client.get("/helpdesk/export/tickets.csv?desde=2024-03-01")
         assert r.status_code == 200
         assert "HT-0001" in r.text and "HT-0002" not in r.text
+
+    def test_validar_json(self, monkeypatch, odoo_helpdesk):
+        monkeypatch.setattr(r_helpdesk, "resolver_tenant", lambda t="default": odoo_helpdesk)
+        r = client.get("/helpdesk/export/validar")
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
 
     def test_error_sin_helpdesk_devuelve_422(self, monkeypatch):
         monkeypatch.setattr(r_helpdesk, "resolver_tenant", lambda t="default": FakeOdoo({}))

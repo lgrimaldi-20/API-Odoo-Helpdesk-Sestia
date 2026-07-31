@@ -64,6 +64,7 @@ El middleware **no escribe nada** en Odoo en esta capa.
 | Archivo | Endpoint | Contenido |
 |---------|----------|-----------|
 | — | `/helpdesk/export/volumenes` | Conteos previos (JSON). **Empezar por aqui** |
+| — | `/helpdesk/export/validar` | Comprueba los tickets contra los catalogos (JSON) |
 | `tickets.csv` | `/helpdesk/export/tickets.csv` | Un ticket por fila (UTF-8, RFC 4180) |
 | `historial.jsonl` | `/helpdesk/export/historial.jsonl` | Un mensaje del chatter por linea |
 | `adjuntos.zip` | `/helpdesk/export/adjuntos.zip` | Binarios + `manifiesto_adjuntos.csv` |
@@ -86,7 +87,13 @@ curl -o catalogos.zip "http://localhost:8000/helpdesk/export/catalogos.zip" \
 curl -o tickets.csv "http://localhost:8000/helpdesk/export/tickets.csv?limite=20" \
   -H "X-Api-Key: tu-clave"
 
-# 4. Exportacion completa (los tres archivos).
+# 4. Validacion: comprueba que todo equipo, etapa, categoria, etiqueta y email
+#    de los tickets existe en los catalogos. Devuelve {"ok": true} o la lista de
+#    valores que faltan con ejemplos de tickets afectados. Ejecutar DESPUES de
+#    precargar los catalogos en SESTIA y ANTES de importar.
+curl "http://localhost:8000/helpdesk/export/validar" -H "X-Api-Key: tu-clave"
+
+# 5. Exportacion completa (los tres archivos).
 curl -o tickets.csv    "http://localhost:8000/helpdesk/export/tickets.csv"     -H "X-Api-Key: tu-clave"
 curl -o historial.jsonl "http://localhost:8000/helpdesk/export/historial.jsonl" -H "X-Api-Key: tu-clave"
 curl -o adjuntos.zip   "http://localhost:8000/helpdesk/export/adjuntos.zip"    -H "X-Api-Key: tu-clave"
@@ -124,6 +131,11 @@ entrega de adjuntos demasiado grande.
 
 ### Decisiones de la exportacion
 
+- **`odoo_ref`**: es la referencia que **enlaza los tres archivos**. Se resuelve
+  una sola vez por exportacion (el numero visible del ticket, o su ID si la
+  instalacion no lo tiene) y se usa igual en `tickets.csv`, `historial.jsonl` y
+  el manifiesto, incluidas las carpetas del ZIP. Si cada archivo usara una
+  referencia distinta, la importacion no podria relacionarlos.
 - **Estado `open`/`closed`**: se deriva del campo `fold` de la etapa (las etapas
   plegadas en el kanban se toman como de cierre). Se puede forzar con una lista
   explicita de nombres: variable `HELPDESK_ETAPAS_CIERRE` en `.env` o
@@ -158,6 +170,7 @@ entrega de adjuntos demasiado grande.
 | GET | `/health` | No | Estado del servicio y conexion Odoo |
 | POST | `/odoo` | Si | Consulta generica sobre un modelo de Odoo |
 | GET | `/helpdesk/export/volumenes` | Si | Conteos previos a la migracion (JSON) |
+| GET | `/helpdesk/export/validar` | Si | Valida los tickets contra los catalogos (JSON) |
 | GET | `/helpdesk/export/tickets.csv` | Si | Tickets, un ticket por fila (CSV) |
 | GET | `/helpdesk/export/historial.jsonl` | Si | Historial del chatter (JSON Lines) |
 | GET | `/helpdesk/export/adjuntos.zip` | Si | Adjuntos + manifiesto (ZIP) |
