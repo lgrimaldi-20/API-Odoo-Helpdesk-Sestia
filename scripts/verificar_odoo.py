@@ -49,20 +49,41 @@ def main() -> int:
     print(f"BD       : {db}")
     print(f"Usuario  : {usuario}\n")
 
-    if not db or db.startswith("PENDIENTE"):
-        print(f"{FALLO} ODOO_DB sin configurar en .env.")
-        print("        Actívalo en Odoo: Ajustes -> modo desarrollador; el nombre")
-        print("        de la base aparece al pie del menu de Ajustes.")
+    clave = os.getenv("ODOO_PASSWORD", "")
+    pendientes = [
+        nombre for nombre, valor in (("ODOO_DB", db), ("ODOO_PASSWORD", clave))
+        if not valor or valor.startswith("PENDIENTE")
+    ]
+    if pendientes:
+        print(f"{FALLO} Sin configurar en .env: {', '.join(pendientes)}")
+        if "ODOO_DB" in pendientes:
+            print("        BD    : Odoo -> Ajustes -> activar modo desarrollador;")
+            print("                el nombre aparece al pie del menu de Ajustes.")
+        if "ODOO_PASSWORD" in pendientes:
+            print("        Clave : Ajustes -> Usuarios -> (tu usuario) ->")
+            print("                Seguridad de la cuenta -> Claves de API.")
         return 1
 
     # 1. Conexion y login
     try:
         odoo = OdooUniversalAPI(
-            url=url, db=db, username=usuario,
-            password=os.getenv("ODOO_PASSWORD", ""),
+            url=url, db=db, username=usuario, password=clave,
         )
     except OdooConnectionError as e:
-        print(f"{FALLO} No se pudo conectar: {e}")
+        # Los dos fallos tipicos dan un error de Odoo poco descriptivo: se
+        # traducen a la accion concreta que hay que hacer.
+        detalle = str(e)
+        if "does not exist" in detalle:
+            print(f"{FALLO} La base de datos '{db}' no existe en este servidor.")
+            print("        Cada instancia tiene su propia BD: la de otra instancia")
+            print("        (p.ej. una de Odoo.sh) no sirve aqui.")
+            print("        Verla en Odoo -> Ajustes -> modo desarrollador.")
+        elif "Access Denied" in detalle or "Wrong login" in detalle:
+            print(f"{FALLO} Usuario o clave incorrectos para esta instancia.")
+            print("        Genera una clave nueva en Ajustes -> Usuarios ->")
+            print("        (tu usuario) -> Seguridad de la cuenta -> Claves de API.")
+        else:
+            print(f"{FALLO} No se pudo conectar: {e}")
         return 1
     print(f"{OK} Login correcto (uid={odoo.uid})")
 
