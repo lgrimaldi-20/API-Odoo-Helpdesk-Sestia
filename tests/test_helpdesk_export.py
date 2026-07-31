@@ -116,7 +116,7 @@ def _valor_campo(registro, campo):
 
 
 def _filtrar(registros, dominio):
-    """Filtro minimo: soporta ('campo','=',v) y ('campo','in',[...])."""
+    """Filtro minimo: soporta '=', 'in' y los comparadores '>=' / '<='."""
     out = registros
     for cond in dominio:
         if not isinstance(cond, (list, tuple)) or len(cond) != 3:
@@ -126,6 +126,10 @@ def _filtrar(registros, dominio):
             out = [r for r in out if _valor_campo(r, campo) == valor]
         elif op == "in":
             out = [r for r in out if _valor_campo(r, campo) in valor]
+        elif op == ">=":
+            out = [r for r in out if str(_valor_campo(r, campo) or "") >= valor]
+        elif op == "<=":
+            out = [r for r in out if str(_valor_campo(r, campo) or "") <= valor]
     return out
 
 
@@ -139,7 +143,12 @@ def odoo_helpdesk():
                 "partner_email": {"type": "char"},
                 "partner_phone": {"type": "char"},
                 "category_id": {"type": "many2one"},
+                "subcategory_id": {"type": "many2one"},
                 "sla_deadline": {"type": "datetime"},
+                # Campo personalizado del cliente (seccion 3) y uno relacional,
+                # que NO debe salir como columna del CSV.
+                "x_studio_origen": {"type": "char"},
+                "x_studio_responsable_id": {"type": "many2one"},
             }
         },
         "helpdesk.ticket": [
@@ -150,9 +159,13 @@ def odoo_helpdesk():
                 "priority": "2", "tag_ids": [1000, 1001],
                 "user_id": [50, "Ana"], "create_uid": [50, "Ana"],
                 "create_date": "2024-03-15 10:30:00", "close_date": False,
+                "write_date": "2024-03-20 08:00:00",
                 "partner_email": "cliente@x.com", "partner_phone": "555",
                 "partner_name": "Cliente X", "sla_deadline": "2024-03-16 10:30:00",
                 "category_id": [7, "Hardware"],
+                "subcategory_id": [70, "Portatil"],
+                "x_studio_origen": "telefono",
+                "x_studio_responsable_id": [50, "Ana"],
             },
             {
                 "id": 2, "ticket_ref": "HT-0002", "name": "Duda facturacion",
@@ -161,8 +174,11 @@ def odoo_helpdesk():
                 "user_id": False, "create_uid": [50, "Ana"],
                 "create_date": "2024-02-01 09:00:00",
                 "close_date": "2024-02-02 12:00:00",
+                "write_date": "2024-02-02 12:00:00",
                 "partner_email": False, "partner_phone": False,
                 "partner_name": False, "sla_deadline": False, "category_id": False,
+                "subcategory_id": False, "x_studio_origen": False,
+                "x_studio_responsable_id": False,
             },
         ],
         "helpdesk.stage": [
@@ -183,6 +199,10 @@ def odoo_helpdesk():
             {"id": 50, "name": "Ana", "login": "ana@empresa.com",
              "email": "ana@empresa.com", "partner_id": [500, "Ana"],
              "active": True, "share": False},
+        ],
+        "res.partner": [
+            {"id": 500, "name": "Ana", "email": "ana@empresa.com"},
+            {"id": 600, "name": "Cliente X", "email": "cliente@x.com"},
         ],
         "mail.message.subtype": [
             {"id": 1, "internal": False},  # comentario
@@ -211,6 +231,23 @@ def odoo_helpdesk():
                 "author_id": False, "email_from": False,
                 "body": "Etapa cambiada", "tracking_value_ids": [1], "attachment_ids": [],
             },
+            {
+                # Correo del cliente: hilo citado + firma + imagen embebida por
+                # /web/image (adjunto 7001, NO ligado al ticket) e inline base64.
+                "id": 9004, "model": "helpdesk.ticket", "res_id": 2,
+                "date": "2024-02-01 10:00:00",
+                "message_type": "email", "subtype_id": [1, "Comentario"],
+                "author_id": [600, "Cliente X"],
+                "email_from": "Cliente X <cliente@x.com>",
+                "body": (
+                    "<p>Cuerpo nuevo del correo</p>"
+                    '<img src="/web/image/7001">'
+                    '<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">'
+                    '<blockquote>El dia 1 escribiste: mensaje anterior</blockquote>'
+                    '<div class="gmail_signature">Un saludo, Cliente</div>'
+                ),
+                "tracking_value_ids": [], "attachment_ids": [],
+            },
         ],
         "ir.attachment": [
             {
@@ -218,6 +255,14 @@ def odoo_helpdesk():
                 "name": "foto.png", "mimetype": "image/png",
                 "file_size": 1234, "create_date": "2024-03-15 11:00:00",
                 "create_uid": [50, "Ana"], "datas": base64.b64encode(b"PNGDATA").decode(),
+            },
+            {
+                # Embebido en el cuerpo del mensaje 9004: res_model es mail.message,
+                # asi que NO lo encuentra la busqueda por ticket.
+                "id": 7001, "res_model": "mail.message", "res_id": 9004,
+                "name": "captura.png", "mimetype": "image/png",
+                "file_size": 99, "create_date": "2024-02-01 10:00:00",
+                "create_uid": [50, "Ana"], "datas": base64.b64encode(b"EMBEBIDA").decode(),
             },
         ],
     }
@@ -256,7 +301,9 @@ class TestTicketsCsv:
         contenido = exportar_tickets_csv(odoo_helpdesk)
         filas = list(csv.DictReader(io.StringIO(contenido)))
         assert len(filas) == 2
-        assert list(filas[0].keys()) == hx.COLUMNAS_TICKETS
+        # Las columnas de la spec van primero; detras, los campos personalizados
+        # del cliente (ver TestCamposExtra).
+        assert list(filas[0].keys())[:len(hx.COLUMNAS_TICKETS)] == hx.COLUMNAS_TICKETS
 
     def test_estado_derivado_de_fold(self, odoo_helpdesk):
         contenido = exportar_tickets_csv(odoo_helpdesk)
@@ -301,7 +348,8 @@ class TestHistorialJsonl:
         lineas = [json.loads(l) for l in contenido.splitlines()]
         tipos = [l["tipo"] for l in lineas]
         assert "tracking" not in tipos
-        assert tipos == ["comentario", "nota_interna"]
+        # 9001 comentario, 9002 nota interna, 9004 correo del cliente.
+        assert tipos == ["comentario", "nota_interna", "comentario"]
 
     def test_incluye_tracking_si_se_pide(self, odoo_helpdesk):
         contenido = exportar_historial_jsonl(odoo_helpdesk, incluir_tracking=True)
@@ -346,6 +394,191 @@ class TestAdjuntosZip:
         assert fila["odoo_message_id"] == "9001"  # adjunto ligado al mensaje
         assert fila["mimetype"] == "image/png"
         assert fila["ruta_en_zip"] == "1/foto.png"
+
+
+# ---------------------------------------------------------------------------
+# Campos personalizados y subcategoria (seccion 3)
+# ---------------------------------------------------------------------------
+
+class TestCamposExtra:
+    def test_subcategoria_se_resuelve_por_nombre(self, odoo_helpdesk):
+        filas = {f["odoo_ref"]: f for f in csv.DictReader(
+            io.StringIO(exportar_tickets_csv(odoo_helpdesk)))}
+        assert filas["HT-0001"]["subcategoria"] == "Portatil"
+        assert filas["HT-0002"]["subcategoria"] == ""
+
+    def test_campos_personalizados_al_final_de_la_cabecera(self, odoo_helpdesk):
+        contenido = exportar_tickets_csv(odoo_helpdesk)
+        columnas = list(csv.DictReader(io.StringIO(contenido)).fieldnames)
+        # Las 18 columnas de la spec, en orden, y luego los x_ del cliente.
+        assert columnas[:len(hx.COLUMNAS_TICKETS)] == hx.COLUMNAS_TICKETS
+        assert columnas[len(hx.COLUMNAS_TICKETS):] == ["x_studio_origen"]
+
+    def test_personalizado_relacional_se_excluye(self, odoo_helpdesk):
+        columnas = csv.DictReader(
+            io.StringIO(exportar_tickets_csv(odoo_helpdesk))).fieldnames
+        # many2one no cabe en una celda: no se exporta como columna.
+        assert "x_studio_responsable_id" not in columnas
+
+    def test_valor_del_campo_personalizado(self, odoo_helpdesk):
+        filas = {f["odoo_ref"]: f for f in csv.DictReader(
+            io.StringIO(exportar_tickets_csv(odoo_helpdesk)))}
+        assert filas["HT-0001"]["x_studio_origen"] == "telefono"
+        assert filas["HT-0002"]["x_studio_origen"] == ""  # False -> vacio
+
+    def test_avisa_de_cerrado_sin_fecha_cierre(self, odoo_helpdesk, caplog):
+        # HT-0002 esta cerrado; le quitamos close_date para provocar el aviso.
+        odoo_helpdesk.datos["helpdesk.ticket"][1]["close_date"] = False
+        with caplog.at_level("WARNING", logger="api-odoo"):
+            exportar_tickets_csv(odoo_helpdesk)
+        assert "cerrados sin fecha_cierre" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Ventana de fechas (paso 8: corte y re-exportacion incremental)
+# ---------------------------------------------------------------------------
+
+class TestVentanaDeFechas:
+    def test_desde_acota_por_write_date(self, odoo_helpdesk):
+        # HT-0002 se modifico el 2024-02-02; HT-0001 el 2024-03-20.
+        contenido = exportar_tickets_csv(odoo_helpdesk, desde="2024-03-01")
+        refs = [f["odoo_ref"] for f in csv.DictReader(io.StringIO(contenido))]
+        assert refs == ["HT-0001"]
+
+    def test_hasta_acota_por_write_date(self, odoo_helpdesk):
+        contenido = exportar_tickets_csv(odoo_helpdesk, hasta="2024-03-01")
+        refs = [f["odoo_ref"] for f in csv.DictReader(io.StringIO(contenido))]
+        assert refs == ["HT-0002"]
+
+    def test_historial_respeta_la_ventana(self, odoo_helpdesk):
+        contenido = exportar_historial_jsonl(odoo_helpdesk, desde="2024-03-01")
+        refs = {json.loads(l)["odoo_ref"] for l in contenido.splitlines()}
+        assert refs == {"HT-0001"}  # los mensajes de HT-0002 quedan fuera
+
+    def test_acepta_iso_con_offset(self):
+        assert hx._a_fecha_odoo("2024-03-15T10:30:00-04:00") == "2024-03-15 10:30:00"
+        assert hx._a_fecha_odoo("2024-03-15T10:30:00Z") == "2024-03-15 10:30:00"
+        assert hx._a_fecha_odoo("2024-03-15") == "2024-03-15 00:00:00"
+
+
+# ---------------------------------------------------------------------------
+# Cuerpo del mensaje: citas, firmas e imagenes embebidas (seccion 5.3)
+# ---------------------------------------------------------------------------
+
+class TestCuerpoDeMensaje:
+    def test_recorta_hilo_citado_y_firma(self):
+        html = (
+            "<p>Cuerpo nuevo</p>"
+            "<blockquote>mensaje anterior</blockquote>"
+            '<div class="gmail_signature">Un saludo</div>'
+        )
+        assert html_a_texto(html, recortar_citas=True) == "Cuerpo nuevo"
+
+    def test_sin_recorte_conserva_todo(self):
+        html = "<p>Cuerpo nuevo</p><blockquote>mensaje anterior</blockquote>"
+        texto = html_a_texto(html, recortar_citas=False)
+        assert "mensaje anterior" in texto
+
+    def test_historial_recorta_por_defecto(self, odoo_helpdesk):
+        lineas = [json.loads(l) for l in
+                  exportar_historial_jsonl(odoo_helpdesk).splitlines()]
+        correo = next(l for l in lineas if l["odoo_message_id"] == 9004)
+        assert correo["cuerpo"] == "Cuerpo nuevo del correo"
+
+    def test_detecta_imagenes_embebidas(self):
+        html = ('<img src="/web/image/7001">'
+                '<img src="data:image/gif;base64,R0lGODlh">')
+        encontrado = hx.imagenes_embebidas(html)
+        assert encontrado["attachment_ids"] == [7001]
+        assert encontrado["inline"][0]["mimetype"] == "image/gif"
+
+    def test_mensaje_referencia_sus_imagenes(self, odoo_helpdesk):
+        lineas = [json.loads(l) for l in
+                  exportar_historial_jsonl(odoo_helpdesk).splitlines()]
+        correo = next(l for l in lineas if l["odoo_message_id"] == 9004)
+        assert correo["imagenes_embebidas"] == [7001]
+
+    def test_autor_email_limpio_de_la_cabecera(self, odoo_helpdesk):
+        lineas = [json.loads(l) for l in
+                  exportar_historial_jsonl(odoo_helpdesk).splitlines()]
+        correo = next(l for l in lineas if l["odoo_message_id"] == 9004)
+        # 'Cliente X <cliente@x.com>' -> solo el email; ademas es rol cliente.
+        assert correo["autor_email"] == "cliente@x.com"
+        assert correo["autor_tipo"] == "cliente"
+
+    def test_solo_abiertos_acota_el_historial(self, odoo_helpdesk):
+        # HT-0002 esta en etapa "Resuelto" (fold=True) -> se excluye.
+        contenido = exportar_historial_jsonl(odoo_helpdesk, solo_abiertos=True)
+        refs = {json.loads(l)["odoo_ref"] for l in contenido.splitlines()}
+        assert refs == {"HT-0001"}
+
+
+# ---------------------------------------------------------------------------
+# Adjuntos: imagenes embebidas rescatadas y lectura por lotes
+# ---------------------------------------------------------------------------
+
+class TestAdjuntosEmbebidos:
+    def test_rescata_la_imagen_embebida_del_cuerpo(self, odoo_helpdesk):
+        zf = zipfile.ZipFile(io.BytesIO(exportar_adjuntos_zip(odoo_helpdesk)))
+        manifiesto = list(csv.DictReader(
+            io.StringIO(zf.read("manifiesto_adjuntos.csv").decode())))
+        ids = {f["odoo_attachment_id"] for f in manifiesto}
+        # 7001 solo aparece embebido en el cuerpo del mensaje 9004.
+        assert "7001" in ids
+        fila = next(f for f in manifiesto if f["odoo_attachment_id"] == "7001")
+        assert zf.read(fila["ruta_en_zip"]) == b"EMBEBIDA"
+        assert fila["odoo_message_id"] == "9004"
+
+    def test_rescata_la_imagen_inline_base64(self, odoo_helpdesk):
+        zf = zipfile.ZipFile(io.BytesIO(exportar_adjuntos_zip(odoo_helpdesk)))
+        nombres = zf.namelist()
+        # La data: URI se materializa como fichero inline_<mensaje>_<n>.<ext>.
+        assert any(n.endswith("inline_9004_1.gif") for n in nombres)
+
+    def test_se_pueden_omitir_las_embebidas(self, odoo_helpdesk):
+        zf = zipfile.ZipFile(io.BytesIO(
+            exportar_adjuntos_zip(odoo_helpdesk, incluir_embebidas=False)))
+        manifiesto = list(csv.DictReader(
+            io.StringIO(zf.read("manifiesto_adjuntos.csv").decode())))
+        assert {f["odoo_attachment_id"] for f in manifiesto} == {"7000"}
+
+    def test_binarios_se_leen_por_lotes(self, odoo_helpdesk, monkeypatch):
+        # Con un lote de 1, cada binario se pide por separado: comprobamos que
+        # la lectura sigue siendo correcta y que no se piden todos de golpe.
+        monkeypatch.setattr(hx, "LOTE_ADJUNTOS", 1)
+        lecturas = []
+        original = odoo_helpdesk.execute
+
+        def espiar(model, method, *args, **kwargs):
+            if model == "ir.attachment" and "datas" in (kwargs.get("fields") or []):
+                lecturas.append(list(args[0]))
+            return original(model, method, *args, **kwargs)
+
+        monkeypatch.setattr(odoo_helpdesk, "execute", espiar)
+        zf = zipfile.ZipFile(io.BytesIO(exportar_adjuntos_zip(odoo_helpdesk)))
+        assert zf.read("1/foto.png") == b"PNGDATA"
+        assert all(len(l) == 1 for l in lecturas)
+
+
+# ---------------------------------------------------------------------------
+# Volumenes (paso 2 del plan)
+# ---------------------------------------------------------------------------
+
+class TestVolumenes:
+    def test_conteos_de_tickets_mensajes_y_adjuntos(self, odoo_helpdesk):
+        v = hx.contar_volumenes(odoo_helpdesk)
+        assert v["tickets"] == {"total": 2, "abiertos": 1, "cerrados": 1}
+        assert v["mensajes"]["total"] == 4
+        assert v["mensajes"]["comentario"] == 2
+        assert v["mensajes"]["nota_interna"] == 1
+        assert v["mensajes"]["tracking"] == 1
+        assert v["adjuntos"]["total"] == 1  # solo el ligado al ticket
+        assert v["adjuntos"]["bytes"] == 1234
+
+    def test_respeta_la_ventana_de_fechas(self, odoo_helpdesk):
+        v = hx.contar_volumenes(odoo_helpdesk, desde="2024-03-01")
+        assert v["tickets"]["total"] == 1
+        assert v["ventana"]["desde"] == "2024-03-01"
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +653,18 @@ class TestRouterHelpdesk:
         r = client.get("/helpdesk/export/catalogos")
         assert r.status_code == 200
         assert "equipos" in r.json()
+
+    def test_volumenes_json(self, monkeypatch, odoo_helpdesk):
+        monkeypatch.setattr(r_helpdesk, "resolver_tenant", lambda t="default": odoo_helpdesk)
+        r = client.get("/helpdesk/export/volumenes")
+        assert r.status_code == 200
+        assert r.json()["tickets"]["total"] == 2
+
+    def test_ventana_de_fechas_en_query(self, monkeypatch, odoo_helpdesk):
+        monkeypatch.setattr(r_helpdesk, "resolver_tenant", lambda t="default": odoo_helpdesk)
+        r = client.get("/helpdesk/export/tickets.csv?desde=2024-03-01")
+        assert r.status_code == 200
+        assert "HT-0001" in r.text and "HT-0002" not in r.text
 
     def test_error_sin_helpdesk_devuelve_422(self, monkeypatch):
         monkeypatch.setattr(r_helpdesk, "resolver_tenant", lambda t="default": FakeOdoo({}))
