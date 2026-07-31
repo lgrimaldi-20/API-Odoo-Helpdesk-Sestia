@@ -90,7 +90,7 @@ def main() -> int:
     # 2. Modulo Helpdesk instalado
     try:
         hay_helpdesk = odoo.execute(
-            "ir.model", "search_count", [[["model", "=", "helpdesk.ticket"]]]
+            "ir.model", "search_count", [["model", "=", "helpdesk.ticket"]]
         )
     except OdooExecutionError as e:
         print(f"{FALLO} No se pudo consultar ir.model: {e}")
@@ -105,7 +105,7 @@ def main() -> int:
     faltan = []
     for modelo, para_que in MODELOS:
         try:
-            n = odoo.execute(modelo, "search_count", [[]])
+            n = odoo.execute(modelo, "search_count", [])
             print(f"  {OK} {modelo:24} {n:>7} registros  ({para_que})")
         except OdooExecutionError as e:
             faltan.append(modelo)

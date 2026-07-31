@@ -331,7 +331,7 @@ def _detectar_modelo_ticket(odoo: OdooUniversalAPI) -> str:
     """
     try:
         existe = odoo.execute(
-            "ir.model", "search_count", [[["model", "=", "helpdesk.ticket"]]]
+            "ir.model", "search_count", [["model", "=", "helpdesk.ticket"]]
         )
     except OdooExecutionError as e:
         raise HelpdeskExportError(f"No se pudo consultar los modelos de Odoo: {e}") from e
@@ -359,7 +359,7 @@ def _mapa_etapas_cierre(
     """
     try:
         etapas = odoo.execute(
-            "helpdesk.stage", "search_read", [[]], fields=["id", "name", "fold"]
+            "helpdesk.stage", "search_read", [], fields=["id", "name", "fold"]
         )
     except OdooExecutionError as e:
         raise HelpdeskExportError(f"No se pudieron leer las etapas: {e}") from e
@@ -725,7 +725,7 @@ def exportar_historial_jsonl(
     # como mensajes visibles para el cliente.
     try:
         subtipos_internos = odoo.execute(
-            "mail.message.subtype", "search", [[["internal", "=", True]]]
+            "mail.message.subtype", "search", [["internal", "=", True]]
         )
     except OdooExecutionError as e:
         raise HelpdeskExportError(
@@ -738,7 +738,7 @@ def exportar_historial_jsonl(
     try:
         mensajes = odoo.execute(
             "mail.message", "search_read",
-            [[["model", "=", modelo], ["res_id", "in", ids_tickets]]],
+            [["model", "=", modelo], ["res_id", "in", ids_tickets]],
             fields=[
                 "id", "res_id", "date", "message_type", "subtype_id",
                 "author_id", "email_from", "body", "tracking_value_ids",
@@ -831,7 +831,7 @@ def _partners_de_usuarios_internos(odoo: OdooUniversalAPI, partner_ids: set[int]
     try:
         usuarios = odoo.execute(
             "res.users", "search_read",
-            [[["partner_id", "in", list(partner_ids)], ["share", "=", False]]],
+            [["partner_id", "in", list(partner_ids)], ["share", "=", False]],
             fields=["partner_id"],
         )
     except OdooExecutionError:
@@ -880,7 +880,7 @@ def exportar_adjuntos_zip(
     try:
         adjuntos = odoo.execute(
             "ir.attachment", "search_read",
-            [[["res_model", "=", modelo], ["res_id", "in", ids_tickets]]],
+            [["res_model", "=", modelo], ["res_id", "in", ids_tickets]],
             fields=[
                 "id", "res_id", "name", "mimetype", "file_size",
                 "create_date", "create_uid",
@@ -894,7 +894,7 @@ def exportar_adjuntos_zip(
     # rescatar las imagenes embebidas en el cuerpo.
     mensajes = odoo.execute(
         "mail.message", "search_read",
-        [[["model", "=", modelo], ["res_id", "in", ids_tickets]]],
+        [["model", "=", modelo], ["res_id", "in", ids_tickets]],
         fields=["id", "res_id", "attachment_ids", "body"],
     )
     adjunto_a_mensaje = {}
@@ -1148,7 +1148,7 @@ def exportar_catalogos(
 def _catalogo_equipos(odoo: OdooUniversalAPI) -> list[dict]:
     try:
         equipos = odoo.execute(
-            "helpdesk.team", "search_read", [[]],
+            "helpdesk.team", "search_read", [],
             fields=["id", "name", "description"], order="name",
         )
     except OdooExecutionError as e:
@@ -1173,7 +1173,7 @@ def _catalogo_etapas(
     mapa_cierre = _mapa_etapas_cierre(odoo, etapas_cierre)
     try:
         etapas = odoo.execute(
-            "helpdesk.stage", "search_read", [[]],
+            "helpdesk.stage", "search_read", [],
             fields=["id", "name", "sequence", "fold", "team_ids"], order="sequence",
         )
     except OdooExecutionError as e:
@@ -1209,7 +1209,7 @@ def _catalogo_categorias(odoo: OdooUniversalAPI) -> list[dict]:
     """Categorias/tipos de ticket, si el modelo existe en esta instalacion."""
     try:
         existe = odoo.execute(
-            "ir.model", "search_count", [[["model", "=", "helpdesk.ticket.type"]]]
+            "ir.model", "search_count", [["model", "=", "helpdesk.ticket.type"]]
         )
     except OdooExecutionError:
         existe = 0
@@ -1217,7 +1217,7 @@ def _catalogo_categorias(odoo: OdooUniversalAPI) -> list[dict]:
         return []
     try:
         tipos = odoo.execute(
-            "helpdesk.ticket.type", "search_read", [[]], fields=["name"], order="name"
+            "helpdesk.ticket.type", "search_read", [], fields=["name"], order="name"
         )
     except OdooExecutionError:
         return []
@@ -1237,7 +1237,7 @@ def _catalogo_subcategorias(odoo: OdooUniversalAPI) -> list[dict]:
         return []
     try:
         tickets = odoo.execute(
-            modelo, "search_read", [[]], fields=["subcategory_id"]
+            modelo, "search_read", [], fields=["subcategory_id"]
         )
     except OdooExecutionError:
         return []
@@ -1251,7 +1251,7 @@ def _catalogo_subcategorias(odoo: OdooUniversalAPI) -> list[dict]:
 def _catalogo_etiquetas(odoo: OdooUniversalAPI) -> list[dict]:
     try:
         tags = odoo.execute(
-            "helpdesk.tag", "search_read", [[]], fields=["name"], order="name"
+            "helpdesk.tag", "search_read", [], fields=["name"], order="name"
         )
     except OdooExecutionError as e:
         raise HelpdeskExportError(f"No se pudieron leer las etiquetas: {e}") from e
@@ -1301,7 +1301,7 @@ def _ids_usuarios_referenciados(odoo: OdooUniversalAPI) -> set[int]:
     modelo = _detectar_modelo_ticket(odoo)
     try:
         tickets = odoo.execute(
-            modelo, "search_read", [[]], fields=["user_id", "create_uid"]
+            modelo, "search_read", [], fields=["user_id", "create_uid"]
         )
     except OdooExecutionError:
         return set()
@@ -1439,14 +1439,14 @@ def contar_volumenes(
     if ids_tickets:
         try:
             subtipos_internos = set(odoo.execute(
-                "mail.message.subtype", "search", [[["internal", "=", True]]]
+                "mail.message.subtype", "search", [["internal", "=", True]]
             ))
         except OdooExecutionError:
             subtipos_internos = set()
 
         msgs = odoo.execute(
             "mail.message", "search_read",
-            [[["model", "=", modelo], ["res_id", "in", ids_tickets]]],
+            [["model", "=", modelo], ["res_id", "in", ids_tickets]],
             fields=["id", "message_type", "subtype_id", "tracking_value_ids"],
         )
         mensajes["total"] = len(msgs)
@@ -1455,7 +1455,7 @@ def contar_volumenes(
 
         atts = odoo.execute(
             "ir.attachment", "search_read",
-            [[["res_model", "=", modelo], ["res_id", "in", ids_tickets]]],
+            [["res_model", "=", modelo], ["res_id", "in", ids_tickets]],
             fields=["id", "file_size"],
         )
         adjuntos["total"] = len(atts)
