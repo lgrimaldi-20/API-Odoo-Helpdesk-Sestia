@@ -30,3 +30,11 @@ coverage.xml
 dist/
 build/
 *.egg-info/
+
+# Exportaciones generadas (datos del cliente: nunca al repo)
+export_qa/
+*.jsonl
+adjuntos*.zip
+catalogos*.zip
+tickets*.csv
+manifiesto_adjuntos.csv
